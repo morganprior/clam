@@ -20,7 +20,7 @@ pub static BIG_ANN_DATA: &[BigAnnData<'static>] = &[
         subset_2: None,
         subset_3: None,
         query: "public_query_gt100.bin",
-        ground: "query.i8bin",
+        ground: "msspacev-1B",
     },
     BigAnnData {
         folder: "yandex_t2i",
@@ -77,18 +77,29 @@ fn read_instances<T: Number>(path: &std::path::PathBuf) -> std::io::Result<Data<
         let step = 1_000_000;
         for i in 0..num_points {
             let instance = read_one(&mut reader, instance_size as u64)?;
-            let instance = instance.chunks(T::num_bytes() as usize).map(|bytes| T::from_le_bytes(bytes).unwrap()).collect();
+            let instance = instance
+                .chunks(T::num_bytes() as usize)
+                .map(|bytes| T::from_le_bytes(bytes).unwrap())
+                .collect();
             data.push(instance);
 
             if (i + 1) % step == 0 {
-                println!("Read {}/{} chunks of size {} ...", (i + 1) / step, num_points / step, step);
+                println!(
+                    "Read {}/{} chunks of size {} ...",
+                    (i + 1) / step,
+                    num_points / step,
+                    step
+                );
                 data.clear();
             }
         }
     } else {
         for _ in 0..num_points {
             let instance = read_one(&mut reader, instance_size as u64)?;
-            let instance = instance.chunks(T::num_bytes() as usize).map(|bytes| T::from_le_bytes(bytes).unwrap()).collect();
+            let instance = instance
+                .chunks(T::num_bytes() as usize)
+                .map(|bytes| T::from_le_bytes(bytes).unwrap())
+                .collect();
             data.push(instance);
         }
         println!("Read {} instances ...", data.len())
@@ -97,12 +108,50 @@ fn read_instances<T: Number>(path: &std::path::PathBuf) -> std::io::Result<Data<
     Ok(data)
 }
 
-fn read_ground(path: &std::path::PathBuf) -> std::io::Result<(Data<u32>, Data<f32>)> {
-    println!("{:?}", path);
-    todo!()
+fn read_ground(path: &std::path::PathBuf) -> std::io::Result<(Data<usize>, Data<f32>)> {
+    println!("Reading from {:?} ...", path);
+
+    let mut reader = std::io::BufReader::new(std::fs::File::open(path)?);
+
+    let num_queries = u32::from_le_bytes(read_one(&mut reader, 4)?.try_into().unwrap()) as usize;
+    let k = u32::from_le_bytes(read_one(&mut reader, 4)?.try_into().unwrap()) as usize;
+
+    // Read true indices
+    let row_size = k * u32::num_bytes() as usize;
+
+    println!("num_queries: {}, k: {}, row_size {}.", num_queries, k, row_size);
+
+    let mut indices: Vec<Vec<usize>> = vec![];
+    for _ in 0..num_queries {
+        let instance = read_one(&mut reader, row_size as u64)?;
+        let instance = instance
+            .chunks(u32::num_bytes() as usize)
+            .map(|bytes| u32::from_le_bytes(bytes.try_into().unwrap()) as usize)
+            .collect();
+        indices.push(instance);
+    }
+    println!("Read {} rows of distances ...", indices.len());
+
+    // read true distances ...
+    let row_size = k * f32::num_bytes() as usize;
+
+    println!("num_queries: {}, k: {}, row_size {}.", num_queries, k, row_size);
+
+    let mut distances: Vec<Vec<f32>> = vec![];
+    for _ in 0..num_queries {
+        let instance = read_one(&mut reader, row_size as u64)?;
+        let instance = instance
+            .chunks(f32::num_bytes() as usize)
+            .map(|bytes| f32::from_le_bytes(bytes.try_into().unwrap()))
+            .collect();
+        distances.push(instance);
+    }
+    println!("Read {} rows of distances ...", distances.len());
+
+    Ok((indices, distances))
 }
 
-pub fn read_data<T: Number>(index: usize) -> (Data<T>, Data<T>, Data<u32>, Data<f32>) {
+pub fn read_data<T: Number>(index: usize) -> (Data<T>, Data<T>, Data<usize>, Data<f32>) {
     assert!(
         index < BIG_ANN_DATA.len(),
         "index must be smaller than {}. Got {} instead.",
@@ -118,14 +167,15 @@ pub fn read_data<T: Number>(index: usize) -> (Data<T>, Data<T>, Data<u32>, Data<
     data_dir.push("search_large");
     data_dir.push(data.folder);
 
-    let train_data = vec![];
-    // let train_data = {
-    //     let mut train_path = data_dir.clone();
-    //     train_path.push(data.train);
-    //     assert!(train_path.exists(), "{:?} does not exist.", &train_path);
-    //     read_instances(&train_path).unwrap()
-    // };
+    // let train_data = vec![];
+    let train_data = {
+        let mut train_path = data_dir.clone();
+        train_path.push(data.train);
+        assert!(train_path.exists(), "{:?} does not exist.", &train_path);
+        read_instances(&train_path).unwrap()
+    };
 
+    // let query_data = vec![];
     let query_data = {
         let mut query_path = data_dir.clone();
         query_path.push(data.query);
