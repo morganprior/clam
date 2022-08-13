@@ -14,6 +14,15 @@ pub struct BigAnnData<'a> {
 
 pub static BIG_ANN_DATA: &[BigAnnData<'static>] = &[
     BigAnnData {
+        folder: "msft_spacev",
+        train: "msft_spacev-1b.i8bin",
+        subset_1: None,
+        subset_2: None,
+        subset_3: None,
+        query: "public_query_gt100.bin",
+        ground: "query.i8bin",
+    },
+    BigAnnData {
         folder: "yandex_t2i",
         train: "yandex_t2i-1b.fbin",
         subset_1: Some("base.1M.fbin"),
@@ -50,43 +59,40 @@ fn read_instances<T: Number>(path: &std::path::PathBuf) -> std::io::Result<Data<
 
     let mut reader = std::io::BufReader::new(std::fs::File::open(path)?);
 
-    let num_points = u32::from_le_bytes(read_one(&mut reader, 4)?.try_into().unwrap());
-    let num_dimensions = u32::from_le_bytes(read_one(&mut reader, 4)?.try_into().unwrap());
-    let instance_size = (num_dimensions * T::num_bytes() as u32) as usize;
+    let num_points = u32::from_le_bytes(read_one(&mut reader, 4)?.try_into().unwrap()) as usize;
+    let num_dimensions = u32::from_le_bytes(read_one(&mut reader, 4)?.try_into().unwrap()) as usize;
+    let instance_size = num_dimensions * T::num_bytes() as usize;
 
     // let num_bytes = reader.bytes().skip(200_000_000 * instance_size).count();
     // println!("{} instances, {} leftovers ...", num_bytes / instance_size, num_bytes % instance_size);
-    reader.bytes().step_by(1_000_000 * instance_size).enumerate().for_each(|(i, _)| println!("step {} ...", i));
+    // reader.bytes().step_by(1_000_000 * instance_size).enumerate().for_each(|(i, _)| println!("step {} ...", i));
 
     println!(
         "num_points: {}, num_dimensions: {}, instance_size {}.",
         num_points, num_dimensions, instance_size
     );
 
-    // let data: Vec<Vec<T>> = {
-    //     let data = read_one(&mut reader, (num_points * instance_size) as u64)?;
-    //     data.chunks(instance_size as usize)
-    //         .map(|row_bytes| {
-    //             row_bytes
-    //                 .chunks(T::num_bytes() as usize)
-    //                 .map(|bytes| T::from_le_bytes(bytes).unwrap())
-    //                 .collect()
-    //         })
-    //         .collect()
-    // };
     let mut data: Vec<Vec<T>> = vec![];
-    // for i in 0..num_points {
-    //     let instance = read_one(&mut reader, instance_size as u64)?;
-    //     let instance = instance.chunks(T::num_bytes() as usize).map(|bytes| T::from_le_bytes(bytes).unwrap()).collect();
-    //     data.push(instance);
+    if num_points >= 1_000_000_000 {
+        let step = 1_000_000;
+        for i in 0..num_points {
+            let instance = read_one(&mut reader, instance_size as u64)?;
+            let instance = instance.chunks(T::num_bytes() as usize).map(|bytes| T::from_le_bytes(bytes).unwrap()).collect();
+            data.push(instance);
 
-    //     if i % 1_000_000 == 0 {
-    //         println!("Read {} instances ...", i);
-    //         data.clear();
-    //     }
-    // }
-
-    println!("Read {} instances", data.len());
+            if (i + 1) % step == 0 {
+                println!("Read {}/{} chunks of size {} ...", (i + 1) / step, num_points / step, step);
+                data.clear();
+            }
+        }
+    } else {
+        for _ in 0..num_points {
+            let instance = read_one(&mut reader, instance_size as u64)?;
+            let instance = instance.chunks(T::num_bytes() as usize).map(|bytes| T::from_le_bytes(bytes).unwrap()).collect();
+            data.push(instance);
+        }
+        println!("Read {} instances ...", data.len())
+    }
 
     Ok(data)
 }
@@ -112,12 +118,13 @@ pub fn read_data<T: Number>(index: usize) -> (Data<T>, Data<T>, Data<u32>, Data<
     data_dir.push("search_large");
     data_dir.push(data.folder);
 
-    let train_data = {
-        let mut train_path = data_dir.clone();
-        train_path.push(data.train);
-        assert!(train_path.exists(), "{:?} does not exist.", &train_path);
-        read_instances(&train_path).unwrap()
-    };
+    let train_data = vec![];
+    // let train_data = {
+    //     let mut train_path = data_dir.clone();
+    //     train_path.push(data.train);
+    //     assert!(train_path.exists(), "{:?} does not exist.", &train_path);
+    //     read_instances(&train_path).unwrap()
+    // };
 
     let query_data = {
         let mut query_path = data_dir.clone();
