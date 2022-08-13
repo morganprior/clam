@@ -29,11 +29,16 @@ rand = "0.8"
 # structopt = "0.3.23"
 # sysinfo = "0.23.5"
 
+[dependencies.serde]
+version = "1.0"
+features = ["derive"]
+
 [dev-dependencies]
 float-cmp = "0.9"
 ndarray-npy = "0.8"
 log = "0.4"
 env_logger = "0.9"
+rmp-serde = "1.1"
 
 [dev-dependencies.criterion]
 version = "0.3"
@@ -46,10 +51,6 @@ features = ["rayon"]
 [dev-dependencies.hdf5]
 version = "0.8"
 features = ["lzf", "blosc"]
-
-[dev-dependencies.serde]
-version = "1.0"
-features = ["derive"]
 
 [dev-dependencies.serde_json]
 version = "1.0"
