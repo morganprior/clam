@@ -18,12 +18,12 @@ pub enum Delta {
 /// `clusters`.
 pub struct KnnSieve<'a, T: Number, U: Number> {
     pub clusters: Vec<&'a Cluster<'a, T, U>>,
-    query: &'a [T],
-    k: usize,
+    pub query: &'a [T],
+    pub k: usize,
     pub cumulative_cardinalities: Vec<usize>,
     pub deltas_0: Vec<U>,
-    deltas_1: Vec<U>,
-    deltas_2: Vec<U>,
+    pub deltas_1: Vec<U>,
+    pub deltas_2: Vec<U>,
 }
 
 impl<'a, T: Number, U: Number> KnnSieve<'a, T, U> {
