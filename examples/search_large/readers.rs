@@ -1,6 +1,7 @@
-use serde::Deserialize;
 use serde::Serialize;
 use std::io::Read;
+
+use super::chunked_data::Data;
 
 type Reader = std::io::BufReader<std::fs::File>;
 
@@ -12,21 +13,6 @@ pub struct BigAnnPaths<'a> {
     pub subset_3: Option<&'a str>,
     pub query: &'a str,
     pub ground: &'a str,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct Data<T> {
-    data: Vec<Vec<T>>,
-}
-
-impl<T: clam::Number> Data<T> {
-    pub fn new() -> Self {
-        Self { data: vec![] }
-    }
-
-    pub fn push(&mut self, row: Vec<T>) {
-        self.data.push(row);
-    }
 }
 
 pub fn make_dir(path: &std::path::Path) -> Result<(), String> {
@@ -70,7 +56,7 @@ fn read_table<T: clam::Number, R: std::io::Read>(
     Ok(data)
 }
 
-fn open_reader(path: &std::path::Path) -> Result<Reader, String> {
+pub fn open_reader(path: &std::path::Path) -> Result<Reader, String> {
     let reader = std::io::BufReader::new(
         std::fs::File::open(path).map_err(|reason| format!("Could not open file {:?} because {}", path, reason))?,
     );
@@ -85,11 +71,20 @@ fn transform_train<T: clam::Number>(in_path: &std::path::Path, out_dir: &std::pa
     let instance_size = num_dimensions * T::num_bytes() as usize;
 
     let chunk_size = 1_000_000;
-    let num_chunks = (num_points / chunk_size) + if num_points % chunk_size == 0 { 0 } else { 1 };
-    for (chunk_index, i) in (1..=num_points).step_by(chunk_size).enumerate() {
-        println!("Transforming chunk {}/{} ...", chunk_index, num_chunks);
+    let num_chunks = (num_points / chunk_size) + if (num_points % chunk_size) == 0 { 0 } else { 1 };
+    let last_chunk_size = if (num_points % chunk_size) == 0 {
+        chunk_size
+    } else {
+        num_points % chunk_size
+    };
+    for (chunk_index, _) in (1..=num_points).step_by(chunk_size).enumerate() {
+        println!("Transforming chunk {}/{} ...", chunk_index + 1, num_chunks);
 
-        let num_rows = std::cmp::min(chunk_size, num_points - i);
+        let num_rows = if chunk_index == (num_chunks - 1) {
+            last_chunk_size
+        } else {
+            chunk_size
+        };
         let chunk = read_table::<T, Reader>(&mut reader, num_rows, instance_size)?;
 
         let mut buffer = vec![];
