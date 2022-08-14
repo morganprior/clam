@@ -6,9 +6,11 @@ use std::hash::Hash;
 use std::hash::Hasher;
 
 use bitvec::prelude::*;
+use rayon::prelude::*;
 
 use crate::prelude::*;
 use crate::utils::helpers;
+use crate::utils::reports;
 
 const SUB_SAMPLE_LIMIT: usize = 100;
 
@@ -386,6 +388,35 @@ impl<'a, T: Number, U: Number> Cluster<'a, T, U> {
             self.right_child = Some(Box::new(self.right_child.unwrap().set_normalized_ratios(means, sds)));
         }
         self
+    }
+
+    pub fn report_cluster(&self) -> reports::ClusterReport {
+        reports::ClusterReport {
+            name: self.name_str(),
+            cardinality: self.cardinality,
+            indices: self.indices.clone(),
+            arg_center: self.arg_center,
+            arg_radius: self.arg_radius,
+            radius: self.radius.map(|v| v.as_f64()),
+            lfd: self.lfd,
+            ratios: self.ratios,
+        }
+    }
+
+    pub fn report_tree(&self, build_time: f64) -> (reports::TreeReport, Vec<reports::ClusterReport>) {
+        let tree_report = reports::TreeReport {
+            data_name: self.space.data().name(),
+            cardinality: self.space.data().cardinality(),
+            dimensionality: self.space.data().dimensionality(),
+            metric_name: self.space.metric().name(),
+            root_name: self.name_str(),
+            max_depth: self.max_leaf_depth(),
+            build_time,
+        };
+
+        let cluster_reports = self.subtree().into_par_iter().map(|c| c.report_cluster()).collect();
+
+        (tree_report, cluster_reports)
     }
 
     /// A reference to the underlying metric space.

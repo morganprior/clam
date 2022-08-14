@@ -1,6 +1,7 @@
 use rayon::prelude::*;
 
 use crate::prelude::*;
+use crate::utils::reports;
 
 pub type SearchHistory<'a, T, U> = Vec<(&'a Cluster<'a, T, U>, U)>;
 
@@ -58,20 +59,33 @@ impl<'a, T: Number, U: Number> CAKES<'a, T, U> {
         self.root.radius() * U::from(2).unwrap()
     }
 
-    pub fn batch_rnn_search(&self, queries_radii: &[(Vec<T>, U)]) -> Vec<Vec<(usize, U)>> {
+    pub fn batch_rnn_search(&self, queries_radii: &[(Vec<T>, U)]) -> Vec<reports::SearchReport> {
         queries_radii
             .par_iter()
             .map(|(query, radius)| self.rnn_search(query, *radius))
             .collect()
     }
 
-    pub fn rnn_search(&self, query: &[T], radius: U) -> Vec<(usize, U)> {
-        let candidate_clusters = self.rnn_tree_search(query, radius).1;
+    pub fn rnn_search(&self, query: &[T], radius: U) -> reports::SearchReport {
+        let (history, leaves) = self.rnn_tree_search(query, radius);
+        let history: Vec<_> = history.into_iter().map(|(c, d)| (c.name_str(), d.as_f64())).collect();
 
-        if candidate_clusters.is_empty() {
+        let hits = if leaves.is_empty() {
             Vec::new()
         } else {
-            self.rnn_leaf_search(query, radius, &candidate_clusters)
+            self.rnn_leaf_search(query, radius, &leaves)
+        };
+
+        let num_distance_calls = history.len() + leaves.iter().map(|c| c.cardinality()).sum::<usize>();
+        let leaves = leaves.into_iter().map(|c| c.name_str()).collect();
+        let (hits, distances) = hits.into_iter().map(|(c, d)| (c, Some(d.as_f64()))).unzip();
+
+        reports::SearchReport {
+            history,
+            leaves,
+            hits,
+            distances,
+            num_distance_calls,
         }
     }
 
@@ -179,8 +193,6 @@ impl<'a, T: Number, U: Number> CAKES<'a, T, U> {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
     use crate::prelude::*;
 
     use super::CAKES;
@@ -194,15 +206,15 @@ mod tests {
         let cakes = CAKES::new(&space).build(&crate::PartitionCriteria::new(true));
 
         let query = &[0., 1.];
-        let (results, _): (Vec<_>, Vec<_>) = cakes.rnn_search(query, 1.5).into_iter().unzip();
+        let results = cakes.rnn_search(query, 1.5).hits;
         assert_eq!(results.len(), 2);
         assert!(results.contains(&0));
         assert!(results.contains(&1));
         assert!(!results.contains(&2));
         assert!(!results.contains(&3));
 
-        let query = Arc::new(cakes.data()).get(1);
-        let (results, _): (Vec<_>, Vec<_>) = cakes.rnn_search(&query, 0.).into_iter().unzip();
+        let query = cakes.data().get(1);
+        let results = cakes.rnn_search(&query, 0.).hits;
         assert_eq!(results.len(), 1);
         assert!(!results.contains(&0));
         assert!(results.contains(&1));

@@ -18,7 +18,7 @@ fn main() {
         readers::make_dir(&out_dir).unwrap();
         (in_dir, out_dir)
     };
-    
+
     let data = readers::BigAnnPaths {
         folder: "msft_spacev",
         train: "msft_spacev-1b.i8bin",
@@ -32,23 +32,13 @@ fn main() {
     let location = out_dir.join(data.folder).join("train");
 
     if !location.exists() {
-        readers::transform::<i8>(
-            &data,
-            &in_dir.join(data.folder),
-            &out_dir.join(data.folder),
-        )
-        .map_err(|reason| format!("Failed on {} because {}", data.folder, reason))
-        .unwrap();
+        readers::transform::<i8>(&data, &in_dir.join(data.folder), &out_dir.join(data.folder))
+            .map_err(|reason| format!("Failed on {} because {}", data.folder, reason))
+            .unwrap();
     }
 
     let cardinality = 1_000_000_000;
-    let dataset = chunked_data::ChunkedTabular::new(
-        &location,
-        cardinality,
-        100,
-        1_000_000,
-        data.folder,
-    );
+    let dataset = chunked_data::ChunkedTabular::new(&location, cardinality, 100, 1_000_000, data.folder);
 
     let metric = clam::metric::Euclidean { is_expensive: false };
     let space = chunked_space::ChunkedTabularSpace::<i8, f32>::new(&dataset, &metric, false);
@@ -56,5 +46,9 @@ fn main() {
     let criteria = clam::PartitionCriteria::new(true).with_min_cardinality(10);
     let cakes = clam::CAKES::new(&space).build(&criteria);
 
-    println!("Built Cakes object with radius {:.2e} and depth {}", cakes.radius(), cakes.depth());
+    println!(
+        "Built Cakes object with radius {:.2e} and depth {}",
+        cakes.radius(),
+        cakes.depth()
+    );
 }

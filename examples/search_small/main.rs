@@ -1,12 +1,13 @@
 use std::collections::HashSet;
-use std::io::Write;
+
+use rayon::prelude::*;
 
 use clam::prelude::*;
 
 mod h5data;
 mod h5number;
 mod h5space;
-mod reports;
+mod utils;
 
 pub fn open_hdf5_file(name: &str) -> hdf5::Result<hdf5::File> {
     let mut data_dir = std::env::current_dir().unwrap();
@@ -48,14 +49,15 @@ where
     let output_dir = {
         let mut output_dir = std::env::current_dir().unwrap();
         output_dir.pop();
-        output_dir.push("data");
-        output_dir.push("search_small");
-        output_dir.push("reports");
+        output_dir.push("results");
         assert!(output_dir.exists(), "Path not found: {:?}", output_dir);
-        output_dir.push("ark_buffer_10");
-        if !output_dir.exists() {
-            std::fs::create_dir(&output_dir).unwrap();
-        }
+
+        output_dir.push(data_name);
+        utils::make_dir(&output_dir, false)?;
+
+        output_dir.push(metric_name);
+        utils::make_dir(&output_dir, false)?;
+
         output_dir
     };
 
@@ -85,6 +87,7 @@ where
     let min_radius = clam::utils::helpers::arg_min(&search_radii).1;
 
     let queries = h5data::H5Data::<Te>::new(&file, "test", format!("{}_test", data_name))?.to_vec_vec::<T>()?;
+    // let queries = queries[0..100].to_vec();
 
     let queries_radii: Vec<(Vec<T>, D)> = queries.into_iter().zip(search_radii.iter().cloned()).collect();
 
@@ -114,11 +117,17 @@ where
     log::info!("Built tree to a depth of {} ...", cakes.depth());
 
     log::info!("Writing tree report on {}-{} data ...", data_name, metric_name);
-    reports::report_tree(&output_dir.join("trees"), cakes.root(), build_time)?;
+    let (tree, clusters) = cakes.root().report_tree(build_time);
+    let cluster_dir = output_dir.join("clusters");
+    utils::make_dir(&cluster_dir, true)?;
+    clusters
+        .into_par_iter()
+        .map(|report| utils::write_report(&report, &cluster_dir.join(format!("{}.json", report.name))))
+        .collect::<Result<Vec<_>, String>>()?;
 
     log::info!("Starting search on {}-{} data ...", data_name, metric_name);
 
-    let (hits, search_times): (Vec<_>, Vec<_>) = queries_radii
+    let (reports, times): (Vec<_>, Vec<_>) = queries_radii
         .iter()
         .enumerate()
         .map(|(i, (query, radius))| {
@@ -137,28 +146,18 @@ where
                     (results, start.elapsed().as_secs_f64())
                 })
                 .collect::<Vec<_>>();
-            // let hits = sample.first().unwrap().0.clone();
-            let hits = {
-                let mut hits = sample.first().unwrap().0.clone();
-                hits.sort_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap());
-                if hits.len() > 100 {
-                    let threshold = hits[100].1;
-                    hits.into_iter().filter(|(_, d)| *d <= threshold).collect()
-                } else {
-                    hits
-                }
-            };
-            let times = sample.into_iter().map(|(_, t)| t).collect();
-            (hits, times)
+            let report = sample.first().unwrap().0.clone();
+            let times = sample.into_iter().map(|(_, t)| t).collect::<Vec<_>>();
+            (report, times)
         })
         .unzip();
 
     log::info!("Collecting report on {}-{} data ...", data_name, metric_name);
 
     let true_hits = neighbors.into_iter().map(|n_row| n_row.into_iter().collect());
-    let hits: Vec<HashSet<usize>> = hits
+    let hits: Vec<HashSet<usize>> = reports
         .iter()
-        .map(|row| HashSet::from_iter(row.iter().map(|(v, _)| *v)))
+        .map(|r| HashSet::from_iter(r.hits.iter().map(|v| *v)))
         .collect();
     let recalls: Vec<f64> = hits
         .iter()
@@ -169,33 +168,21 @@ where
         })
         .collect();
 
-    let outputs = hits.iter().map(|row| row.iter().cloned().collect::<Vec<_>>()).collect();
-
-    let report = reports::RnnReport {
-        data_name,
-        metric_name,
-        num_queries: queries_radii.len(),
-        num_runs,
-        cardinality: train.cardinality(),
-        dimensionality: train.dimensionality(),
-        tree_depth: cakes.depth(),
-        build_time,
-        root_radius: cakes.radius().as_f64(),
-        search_radii: search_radii.into_iter().map(|v| v.as_f64()).collect(),
-        search_times,
-        outputs,
-        recalls,
+    let report = utils::RnnReport {
+        tree,
+        radii: queries_radii.iter().map(|(_, r)| r.as_f64()).collect(),
+        report: utils::BatchReport {
+            num_queries: queries_radii.len(),
+            num_runs,
+            times,
+            reports,
+            recalls,
+        },
     };
 
-    let failures = report.is_valid();
+    let failures = report.validate();
     if failures.is_empty() {
-        let report = serde_json::to_string_pretty(&report)
-            .map_err(|reason| format!("Could not convert report to json because {}", reason))?;
-        let output_path = output_dir.join(format!("{}-{}.json", data_name, metric_name));
-        let mut file = std::fs::File::create(&output_path)
-            .map_err(|reason| format!("Could not create/open file {:?} because {}", output_path, reason))?;
-        Ok(write!(&mut file, "{}", report)
-            .map_err(|reason| format!("Could not write report to {:?} because {}.", output_path, reason))?)
+        utils::write_report(report, &output_dir.join("rnn-report.json"))
     } else {
         Err(format!("The report was invalid:\n{:?}", failures.join("\n")))
     }
