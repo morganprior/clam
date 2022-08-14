@@ -21,11 +21,11 @@ pub struct TreeReport {
     pub build_time: f64,
 }
 
-#[derive(Debug, serde::Deserialize, serde::Serialize, Clone)]
+#[derive(Debug, serde::Deserialize, serde::Serialize, Clone, Default)]
 pub struct SearchReport {
     pub history: Vec<(String, f64)>,
     pub leaves: Vec<String>,
     pub hits: Vec<usize>,
-    pub distances: Vec<Option<f64>>,
+    pub distances: Vec<f64>,
     pub num_distance_calls: usize,
 }

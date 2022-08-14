@@ -78,7 +78,7 @@ impl<'a, T: Number, U: Number> CAKES<'a, T, U> {
 
         let num_distance_calls = history.len() + leaves.iter().map(|c| c.cardinality()).sum::<usize>();
         let leaves = leaves.into_iter().map(|c| c.name_str()).collect();
-        let (hits, distances) = hits.into_iter().map(|(c, d)| (c, Some(d.as_f64()))).unzip();
+        let (hits, distances) = hits.into_iter().map(|(c, d)| (c, d.as_f64())).unzip();
 
         reports::SearchReport {
             history,
@@ -128,23 +128,28 @@ impl<'a, T: Number, U: Number> CAKES<'a, T, U> {
         )
     }
 
-    pub fn batch_knn_search(&self, queries_ks: &[(Vec<T>, usize)]) -> Vec<Vec<(usize, U)>> {
+    pub fn batch_knn_search(&self, queries_ks: &[(Vec<T>, usize)]) -> Vec<reports::SearchReport> {
         queries_ks
             .par_iter()
             .map(|(query, k)| self.knn_search(query, *k))
             .collect()
     }
 
-    pub fn knn_search(&self, query: &[T], k: usize) -> Vec<(usize, U)> {
-        let sieve = {
-            let mut sieve = super::KnnSieve::new(vec![&self.root], query, k);
+    pub fn knn_search(&self, query: &[T], k: usize) -> reports::SearchReport {
+        let mut report = reports::SearchReport::default();
 
-            while !sieve.are_all_leaves() {
-                sieve = sieve.replace_with_child_clusters().filter();
-            }
+        let mut sieve = super::KnnSieve::new(vec![&self.root], query, k).build();
+        sieve.append_history(&mut report);
 
-            sieve
-        };
+        while !sieve.are_all_leaves() {
+            sieve = sieve.replace_with_child_clusters();
+            sieve.append_history(&mut report);
+            sieve = sieve.filter();
+        }
+
+        report.num_distance_calls = report.history.len();
+        report.num_distance_calls += sieve.clusters.iter().map(|c| c.cardinality()).sum::<usize>(); // TODO: This is wrong because we don't look into all leaves
+        report.leaves = sieve.clusters.iter().map(|c| c.name_str()).collect();
 
         // TODO: These three lines should be a unittest on KnnSieve
         // let last = sieve.cumulative_cardinalities.len() - 1;
@@ -157,10 +162,13 @@ impl<'a, T: Number, U: Number> CAKES<'a, T, U> {
         //     "Sieve has too many clusters and needs better filtering."
         // );
 
-        let knn = sieve.extract();
-        assert!(knn.len() == k);
+        let (hits, distances) = sieve.extract();
+        assert_eq!(hits.len(), k);
 
-        knn
+        report.hits = hits;
+        report.distances = distances.into_iter().map(|d| d.as_f64()).collect();
+
+        report
     }
 
     pub fn linear_search(&self, query: &[T], radius: U, indices: Option<Vec<usize>>) -> Vec<(usize, U)> {

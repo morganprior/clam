@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
 
-use crate::prelude::*;
+use crate::{prelude::*, utils::reports};
 
 use super::find_kth;
 
@@ -31,7 +31,7 @@ impl<'a, T: Number, U: Number> PartialOrd for Item<'a, T, U> {
 }
 
 struct OrdNumber<U: Number> {
-    number: U
+    number: U,
 }
 
 impl<U: Number> PartialEq for OrdNumber<U> {
@@ -99,6 +99,15 @@ impl<'a, T: Number, U: Number> KnnSieve<'a, T, U> {
         self
     }
 
+    pub fn append_history(&self, report: &mut reports::SearchReport) {
+        let clusters = self
+            .clusters
+            .iter()
+            .map(|c| c.name_str())
+            .zip(self.deltas.iter().map(|d| d.as_f64()));
+        report.history.extend(clusters);
+    }
+
     fn delta(&self, c: &Cluster<T, U>) -> U {
         c.distance_to_instance(self.query)
     }
@@ -146,24 +155,31 @@ impl<'a, T: Number, U: Number> KnnSieve<'a, T, U> {
 
         self.clusters = clusters;
         self.cumulative_cardinalities = cumulative_cardinalities;
+        let index = self
+            .cumulative_cardinalities
+            .iter()
+            .enumerate()
+            .find(|(_, &c)| c > self.k)
+            .unwrap()
+            .0;
         match delta {
             Delta::Center => {
                 self.deltas = deltas;
                 self.deltas_max = d1s;
                 self.deltas_min = d2s;
-                self.deltas[self.k]
+                self.deltas[index]
             }
             Delta::Max => {
                 self.deltas = d1s;
                 self.deltas_max = deltas;
                 self.deltas_min = d2s;
-                self.deltas_max[self.k]
+                self.deltas_max[index]
             }
             Delta::Min => {
                 self.deltas = d1s;
                 self.deltas_max = d2s;
                 self.deltas_min = deltas;
-                self.deltas_min[self.k]
+                self.deltas_min[index]
             }
         }
     }
@@ -183,6 +199,7 @@ impl<'a, T: Number, U: Number> KnnSieve<'a, T, U> {
     }
 
     pub fn replace_with_child_clusters(mut self) -> Self {
+
         let (clusters, deltas_0, deltas_1, deltas_2) = self
             .clusters
             .iter()
@@ -214,6 +231,7 @@ impl<'a, T: Number, U: Number> KnnSieve<'a, T, U> {
         self.deltas = deltas_0;
         self.deltas_max = deltas_1;
         self.deltas_min = deltas_2;
+        self.update_cumulative_cardinalities();
 
         self
     }
@@ -268,8 +286,13 @@ impl<'a, T: Number, U: Number> KnnSieve<'a, T, U> {
     /// `metric` in use obeys the triangle inequality, then the results will
     /// have perfect recall. If this method is called before the sieve has been
     /// filtered down to the leaves, the results may not have perfect recall.
-    pub fn extract(&self) -> Vec<(usize, U)> {
-        let mut candidates = self.clusters.iter().cloned().zip(self.deltas_min.iter().cloned()).collect::<Vec<_>>();
+    pub fn extract(&self) -> (Vec<usize>, Vec<U>) {
+        let mut candidates = self
+            .clusters
+            .iter()
+            .cloned()
+            .zip(self.deltas_min.iter().cloned())
+            .collect::<Vec<_>>();
 
         let mut pq = priority_queue::DoublePriorityQueue::new();
         let space = self.clusters.first().unwrap().space();
@@ -277,14 +300,13 @@ impl<'a, T: Number, U: Number> KnnSieve<'a, T, U> {
         while !candidates.is_empty() {
             let candidate = candidates.pop().unwrap().0;
             let indices = candidate.indices();
-            let instances = indices.iter().map(|&i| space.data().get(i)).collect::<Vec<_>>();  // TODO: Avoid loading these
+            let instances = indices.iter().map(|&i| space.data().get(i)).collect::<Vec<_>>(); // TODO: Avoid loading these
             let distances = space.metric().one_to_many(self.query, &instances);
 
-            indices.into_iter().zip(distances.into_iter())
-                .for_each(|(i, d)| {
-                    pq.push(i, OrdNumber { number: d });
-                });
-            
+            indices.into_iter().zip(distances.into_iter()).for_each(|(i, d)| {
+                pq.push(i, OrdNumber { number: d });
+            });
+
             while pq.len() > self.k {
                 pq.pop_min();
             }
@@ -293,7 +315,7 @@ impl<'a, T: Number, U: Number> KnnSieve<'a, T, U> {
             candidates = candidates.into_iter().filter(|(_, d)| *d <= threshold).collect();
         }
 
-        pq.into_iter().map(|(i, d)| (i, d.number)).collect()
+        pq.into_iter().map(|(i, d)| (i, d.number)).unzip()
     }
 }
 
