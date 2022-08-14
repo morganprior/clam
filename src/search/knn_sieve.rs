@@ -199,7 +199,6 @@ impl<'a, T: Number, U: Number> KnnSieve<'a, T, U> {
     }
 
     pub fn replace_with_child_clusters(mut self) -> Self {
-
         let (clusters, deltas_0, deltas_1, deltas_2) = self
             .clusters
             .iter()
@@ -307,11 +306,14 @@ impl<'a, T: Number, U: Number> KnnSieve<'a, T, U> {
                 pq.push(i, OrdNumber { number: d });
             });
 
+            let mut potential_ties = vec![];
             while pq.len() > self.k {
-                pq.pop_min();
+                potential_ties.push(pq.pop_max().unwrap());
             }
 
-            let threshold = pq.peek_min().unwrap().1.number;
+            let threshold = pq.peek_max().unwrap().1.number;
+            pq.extend(potential_ties.into_iter().filter(|(_, d)| d.number == threshold));
+
             candidates = candidates.into_iter().filter(|(_, d)| *d <= threshold).collect();
         }
 

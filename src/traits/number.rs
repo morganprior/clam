@@ -35,8 +35,8 @@ pub trait Number:
     fn from_le_bytes(bytes: &[u8]) -> Result<Self, String>;
     fn from_be_bytes(bytes: &[u8]) -> Result<Self, String>;
 
-    /// Converts the number to an f64 for some helpful functions.
     fn as_f64(&self) -> f64;
+    // fn as_f32(&self) -> f32;
 }
 
 macro_rules! impl_number {
@@ -72,6 +72,10 @@ macro_rules! impl_number {
                 fn as_f64(&self) -> f64 {
                     *self as f64
                 }
+
+                // fn as_f32(&self) -> f32 {
+                //     *self as f32
+                // }
             }
         )*
     }

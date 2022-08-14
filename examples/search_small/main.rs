@@ -2,7 +2,8 @@ use std::collections::HashSet;
 
 use rayon::prelude::*;
 
-use clam::{prelude::*, utils::reports::SearchReport};
+use clam::prelude::*;
+use clam::utils::reports::SearchReport;
 
 mod h5data;
 mod h5number;
@@ -85,33 +86,27 @@ where
     let neighbors =
         h5data::H5Data::<N>::new(&file, "neighbors", format!("{}_neighbors", data_name))?.to_vec_vec::<usize>()?;
 
-    let ks = neighbors.iter().map(|row| row.len());
-
     let distances =
         h5data::H5Data::<D>::new(&file, "distances", format!("{}_distances", data_name))?.to_vec_vec::<D>()?;
 
-    // let search_radii: Vec<_> = distances
-    //     .into_iter()
-    //     .map(|row| clam::utils::helpers::arg_max(&row).1)
-    //     .collect();
-
-    // Adding a 10% buffer to search radius to test change in recall
     let search_radii: Vec<_> = distances
         .into_iter()
         .map(|row| clam::utils::helpers::arg_max(&row).1)
-        .map(|v| D::from(v.as_f64() * 1.1).unwrap())
         .collect();
+
+    // Adding a 10% buffer to search radius to test change in recall
+    // let search_radii: Vec<_> = distances
+    //     .into_iter()
+    //     .map(|row| clam::utils::helpers::arg_max(&row).1)
+    //     .map(|v| D::from(v.as_f64() * 1.1).unwrap())
+    //     .collect();
 
     let min_radius = clam::utils::helpers::arg_min(&search_radii).1;
 
     let queries = h5data::H5Data::<Te>::new(&file, "test", format!("{}_test", data_name))?.to_vec_vec::<T>()?;
     let queries = queries[0..100].to_vec();
 
-    let queries: Vec<((Vec<T>, D), usize)> = queries
-        .into_iter()
-        .zip(search_radii.into_iter())
-        .zip(ks.into_iter())
-        .collect();
+    let queries: Vec<(Vec<T>, D)> = queries.into_iter().zip(search_radii.into_iter()).collect();
 
     let metric = clam::metric_from_name::<T, D>(metric_name, false)?;
 
@@ -153,7 +148,7 @@ where
     let (rnn_reports, knn_reports): (Vec<_>, Vec<_>) = queries
         .iter()
         .enumerate()
-        .map(|(i, ((query, radius), k))| {
+        .map(|(i, (query, radius))| {
             if (i + 1) % 10 == 0 {
                 log::info!(
                     "Progress {:6.2}% on {}-{} data ...",
@@ -176,11 +171,12 @@ where
             let knn_sample = (0..num_runs)
                 .map(|_| {
                     let start = std::time::Instant::now();
-                    let results = cakes.knn_search(query, *k);
+                    let results = cakes.knn_search(query, 100);
                     (results, start.elapsed().as_secs_f64())
                 })
                 .collect::<Vec<_>>();
             let knn_report = knn_sample.first().unwrap().0.clone();
+            assert_eq!(knn_report.hits.len(), 100);
             let knn_times = knn_sample.into_iter().map(|(_, t)| t).collect::<Vec<_>>();
 
             ((rnn_report, rnn_times), (knn_report, knn_times))
@@ -189,6 +185,14 @@ where
 
     let (rnn_reports, rnn_times): (Vec<_>, Vec<_>) = rnn_reports.into_iter().unzip();
     let (knn_reports, knn_times): (Vec<_>, Vec<_>) = knn_reports.into_iter().unzip();
+
+    // let rnn_radii = queries.iter().map(|(_, d)| d.as_f64());
+    // let knn_radii = knn_reports.iter().map(|r| helpers::arg_max(&r.distances).1);
+    // let differences = rnn_radii.zip(knn_radii).filter(|(r, k)| r != k).collect::<Vec<_>>();
+    // let max_difference = helpers::arg_max(&differences).1;
+
+    // log::info!("num_differences {}, max_difference {:?}", differences.len(), max_difference);
+    // assert!(differences.is_empty());
 
     log::info!("Collecting report on {}-{} data ...", data_name, metric_name);
 
@@ -200,7 +204,7 @@ where
     let rnn_recalls = compute_recall(&rnn_reports, &true_hits);
     let rnn_report = utils::RnnReport {
         tree: tree.clone(),
-        radii: queries.iter().map(|((_, r), _)| r.as_f64()).collect(),
+        radii: queries.iter().map(|(_, r)| r.as_f64()).collect(),
         report: utils::BatchReport {
             num_queries: queries.len(),
             num_runs,
@@ -213,7 +217,7 @@ where
     let knn_recalls = compute_recall(&knn_reports, &true_hits);
     let knn_report = utils::KnnReport {
         tree,
-        ks: queries.iter().map(|(_, k)| *k).collect(),
+        ks: vec![100; queries.len()],
         report: utils::BatchReport {
             num_queries: queries.len(),
             num_runs,
@@ -226,7 +230,12 @@ where
     let mut failures = rnn_report.validate();
     failures.append(&mut knn_report.validate());
     if failures.is_empty() {
+        let mut rnn_report = rnn_report;
+        rnn_report.report.reports.clear();
         utils::write_report(rnn_report, &output_dir.join("rnn-report.json"))?;
+
+        let mut knn_report = knn_report;
+        knn_report.report.reports.clear();
         utils::write_report(knn_report, &output_dir.join("knn-report.json"))
     } else {
         Err(format!("A report was invalid:\n{:?}", failures.join("\n")))
@@ -237,18 +246,18 @@ fn main() -> Result<(), String> {
     env_logger::Builder::new().parse_filters("info").init();
 
     let results = [
-        search::<f32, f32, i32, f32, f32>("fashion-mnist", "euclidean", 1),
-        // search::<f32, f32, i32, f32, f32>("deep-image", "cosine", 10),
-        // search::<f32, f32, i32, f32, f32>("gist", "euclidean", 10),
-        // search::<f32, f32, i32, f32, f32>("glove-25", "cosine", 10),
-        // search::<f32, f32, i32, f32, f32>("glove-50", "cosine", 10),
-        // search::<f32, f32, i32, f32, f32>("glove-100", "cosine", 10),
-        // search::<f32, f32, i32, f32, f32>("glove-200", "cosine", 10),
-        // search::<f32, f64, i32, f32, f32>("lastfm", "cosine", 10),
-        // search::<f32, f32, i32, f32, f32>("mnist", "euclidean", 10),
-        // search::<f32, f32, i32, f32, f32>("nytimes", "cosine", 10),
-        // search::<f32, f32, i32, f32, f32>("sift", "euclidean", 10),
-        // search::<bool, bool, i32, f32, u8>("kosarak", "jaccard", 10),
+        // search::<f32, f32, i32, f32, f32>("deep-image", "cosine", 1),
+        // search::<f32, f32, i32, f32, f32>("fashion-mnist", "euclidean", 1),
+        // search::<f32, f32, i32, f32, f32>("gist", "euclidean", 1),
+        // search::<f32, f32, i32, f32, f32>("glove-25", "cosine", 1),
+        // search::<f32, f32, i32, f32, f32>("glove-50", "cosine", 1),
+        // search::<f32, f32, i32, f32, f32>("glove-100", "cosine", 1),
+        // search::<f32, f32, i32, f32, f32>("glove-200", "cosine", 1),
+        // search::<f32, f64, i32, f32, f32>("lastfm", "cosine", 1),
+        search::<f32, f32, i32, f32, f32>("mnist", "euclidean", 1),
+        // search::<f32, f32, i32, f32, f32>("nytimes", "cosine", 1),
+        // search::<f32, f32, i32, f32, f32>("sift", "euclidean", 1),
+        // search::<bool, bool, i32, f32, u8>("kosarak", "jaccard", 1),
     ];
     println!(
         "Successful for {}/{} datasets.",
