@@ -217,7 +217,7 @@ impl<'a, T: Number, U: Number> KnnSieve<'a, T, U> {
                         let [l, r] = c_.children();
                         c.extend_from_slice(&[l, r]);
                         let l0 = self.delta(l);
-                        let r0 = self.delta(l);
+                        let r0 = self.delta(r);
                         d0.extend_from_slice(&[l0, r0]);
                         d1.extend_from_slice(&[self.delta_max(l, l0), self.delta_max(r, r0)]);
                         d2.extend_from_slice(&[self.delta_min(l, l0), self.delta_min(r, r0)]);

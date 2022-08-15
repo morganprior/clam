@@ -247,7 +247,7 @@ fn main() -> Result<(), String> {
 
     let results = [
         // search::<f32, f32, i32, f32, f32>("deep-image", "cosine", 1),
-        // search::<f32, f32, i32, f32, f32>("fashion-mnist", "euclidean", 1),
+        //search::<f32, f32, i32, f32, f32>("fashion-mnist", "euclidean", 1),
         // search::<f32, f32, i32, f32, f32>("gist", "euclidean", 1),
         // search::<f32, f32, i32, f32, f32>("glove-25", "cosine", 1),
         // search::<f32, f32, i32, f32, f32>("glove-50", "cosine", 1),
