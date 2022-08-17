@@ -205,14 +205,14 @@ fn main() -> Result<(), String> {
 
     let results = [
         // search::<f32, f32, i32, f32, f32>("deep-image", "cosine", 10),
-        search::<f32, f32, i32, f32, f32>("fashion-mnist", "euclidean", 10),
+        //search::<f32, f32, i32, f32, f32>("fashion-mnist", "euclidean", 10),
         // search::<f32, f32, i32, f32, f32>("gist", "euclidean", 10),
         // search::<f32, f32, i32, f32, f32>("glove-25", "cosine", 10),
         // search::<f32, f32, i32, f32, f32>("glove-50", "cosine", 10),
         // search::<f32, f32, i32, f32, f32>("glove-100", "cosine", 10),
         // search::<f32, f32, i32, f32, f32>("glove-200", "cosine", 10),
         // search::<f32, f64, i32, f32, f32>("lastfm", "cosine", 10),
-        //search::<f32, f32, i32, f32, f32>("mnist", "euclidean", 10),
+        search::<f32, f32, i32, f32, f32>("mnist", "euclidean", 10),
         // search::<f32, f32, i32, f32, f32>("nytimes", "cosine", 10),
         // search::<f32, f32, i32, f32, f32>("sift", "euclidean", 10),
         // search::<bool, bool, i32, f32, u8>("kosarak", "jaccard", 10),

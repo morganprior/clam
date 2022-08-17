@@ -25,7 +25,7 @@ struct ClusterReport {
     lfd: f64,
     left_child: Option<String>,
     right_child: Option<String>,
-    //ratios: [f64; 6],
+    ratios: [f64; 6],
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -108,7 +108,7 @@ where
             lfd: cluster.lfd(),
             left_child: None,
             right_child: None,
-            //ratios: cluster.ratios()
+            ratios: cluster.ratios()
         }
     } else {
         ClusterReport {
@@ -121,7 +121,7 @@ where
             lfd: cluster.lfd(),
             left_child: Some(cluster.left_child().name_str()),
             right_child: Some(cluster.right_child().name_str()),
-            //ratios: cluster.ratios()
+            ratios: cluster.ratios()
         }
     };
 

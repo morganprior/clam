@@ -43,6 +43,22 @@ for path in trees_path.iterdir():
         False,
         output_base,
     )
+    plots.plot_ratios_vs_depth(
+        "violin", 
+        tree, 
+        clusters_by_depth, 
+        False, 
+        output_base, 
+        "lfd_ema"
+    )
+    plots.plot_ratios_vs_depth(
+        "heat", 
+        tree, 
+        clusters_by_depth, 
+        False, 
+        output_base,
+        "radius"
+    )
 
 # Plot search timings
 search_path = paths.REPORTS_DIR.joinpath(
