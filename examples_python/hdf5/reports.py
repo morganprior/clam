@@ -26,7 +26,7 @@ class ClusterReport(pydantic.BaseModel):
     lfd: float
     left_child: typing.Union[str, None]
     right_child: typing.Union[str, None]
-    # ratios: list[float]
+    #ratios: list[float]
 
 
 def load_tree(base_path: pathlib.Path) -> list[ClusterReport]:

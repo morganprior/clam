@@ -21,6 +21,7 @@ impl<'a, T: Number, U: Number> CAKES<'a, T, U> {
     }
 
     pub fn build(self, criteria: &crate::PartitionCriteria<T, U>) -> Self {
+        //let root = self.root.partition(criteria, true).with_ratios(false);
         let root = self.root.partition(criteria, true);
         let depth = root.max_leaf_depth();
         CAKES {

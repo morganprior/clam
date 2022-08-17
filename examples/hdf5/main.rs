@@ -112,7 +112,6 @@ where
     let cakes = cakes.build(&partition_criteria);
     let build_time = start.elapsed().as_secs_f64();
     log::info!("Built tree to a depth of {} ...", cakes.depth());
-
     log::info!("Writing tree report on {}-{} data ...", data_name, metric_name);
     reports::report_tree(&output_dir.join("trees"), cakes.root(), build_time)?;
 

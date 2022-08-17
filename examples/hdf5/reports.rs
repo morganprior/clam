@@ -25,7 +25,7 @@ struct ClusterReport {
     lfd: f64,
     left_child: Option<String>,
     right_child: Option<String>,
-    // ratios: [f64; 6],
+    //ratios: [f64; 6],
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -87,7 +87,7 @@ where
             .map_err(|reason| format!("Could not create/open file {:?} because {}", path, reason))?;
         write!(&mut file, "{}", report)
             .map_err(|reason| format!("Could not write report to {:?} because {}.", path, reason))?;
-
+        
         root.subtree().into_par_iter().map(|c| _report_tree(&dir, c)).collect()
     }
 }
@@ -108,6 +108,7 @@ where
             lfd: cluster.lfd(),
             left_child: None,
             right_child: None,
+            //ratios: cluster.ratios()
         }
     } else {
         ClusterReport {
@@ -120,6 +121,7 @@ where
             lfd: cluster.lfd(),
             left_child: Some(cluster.left_child().name_str()),
             right_child: Some(cluster.right_child().name_str()),
+            //ratios: cluster.ratios()
         }
     };
 
