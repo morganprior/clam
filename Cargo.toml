@@ -64,6 +64,7 @@ path = "examples/search_small/main.rs"
 name = "search_large"
 path = "examples/search_large/main.rs"
 
+
 [[bench]]
 name = "partition"
 harness = false
@@ -71,3 +72,8 @@ harness = false
 [[bench]]
 name = "cakes"
 harness = false
+
+[[bench]]
+name = "find_kth"
+harness = false
+

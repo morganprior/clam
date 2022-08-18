@@ -17,7 +17,7 @@ pub fn find_kth<'a, T: PartialOrd + Clone, U: PartialOrd + Clone>(
     )
 }
 
-fn _find_kth<T: PartialOrd + Clone, U: PartialOrd + Clone>(
+pub fn _find_kth<T: PartialOrd + Clone, U: PartialOrd + Clone>(
     items: Vec<T>,
     cumulative_cardinalities: Vec<usize>,
     deltas: Vec<U>,
