@@ -44,7 +44,7 @@ pub fn _find_kth<T: PartialOrd + Clone, U: PartialOrd + Clone>(
         Ordering::Less => _find_kth(items, cumulative_cardinalities, deltas, k, partition_index + 1, r),
         Ordering::Equal => (items, deltas, cumulative_cardinalities),
         Ordering::Greater => {
-            if (partition_index > 1) && (cumulative_cardinalities[partition_index - 1] > k) {
+            if (partition_index > 0) && (cumulative_cardinalities[partition_index - 1] > k) {
                 _find_kth(items, cumulative_cardinalities, deltas, k, l, partition_index - 1)
             } else {
                 (items, deltas, cumulative_cardinalities)
@@ -76,6 +76,7 @@ fn partition<T: PartialOrd + Clone, U: PartialOrd + Clone>(
         b += 1;
     }
 
+    swaps(&mut items, &mut cardinalities, &mut deltas, a, r);
     (items, cardinalities, deltas, a)
 }
 
