@@ -11,14 +11,14 @@ use clam::prelude::*;
 use clam::search::KnnSieve;
 use clam::Tabular;
 
-fn sort_and_index<'a>(v: &'a mut [(&clam::Cluster<'a, f64, f64>, f64)], k: usize) -> f64 {
+fn sort_and_index<'a>(v: &'a mut Vec<(&clam::Cluster<'a, f64, f64>, f64)>, k: usize) -> f64 {
     v.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
 
     let m = v[k].1.clone();
     m
 }
 
-fn unstable_sort_and_index<'a>(v: &'a mut [(&clam::Cluster<'a, f64, f64>, f64)], k: usize) -> f64 {
+fn unstable_sort_and_index<'a>(v: &'a mut Vec<(&clam::Cluster<'a, f64, f64>, f64)>, k: usize) -> f64 {
     v.sort_unstable_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
     v[k].1.clone()
 }
@@ -31,6 +31,14 @@ pub fn _find_kth(items: Vec<(&clam::Cluster<f64, f64>, f64)>, ccs: Vec<usize>, k
         .collect();
     
     let (items, cards, partition_index) = partition(items, cards, l, r);
+    
+    let ccs = cards
+        .iter()
+        .scan(0, |acc, v| {
+            *acc += *v;
+            Some(*acc)
+        })
+        .collect::<Vec<_>>();
 
     match ccs[partition_index].cmp(&k) {
         Ordering::Less => _find_kth(items, ccs, k, partition_index + 1, r),
@@ -81,8 +89,8 @@ fn find_kth(c: &mut Criterion) {
     group.significance_level(0.05).sample_size(10);
 
     let mut rng = rand::thread_rng();
-    let data: Vec<Vec<f64>> = (0..1000)
-        .map(|_| (0..13).map(|_| rng.gen_range(0.0..100.0)).collect())
+    let data: Vec<Vec<f64>> = (0..10000)
+        .map(|_| (0..13).map(|_| rng.gen_range(0.0..1000.0)).collect())
         .collect();
     let dataset = crate::Tabular::<f64>::new(&data, "test_cluster".to_string());
     let metric = metric_from_name::<f64, f64>("euclideansq", false).unwrap();
@@ -93,7 +101,9 @@ fn find_kth(c: &mut Criterion) {
     let cluster = Cluster::new_root(&space).build().partition(&partition_criteria, true);
     let flat_tree = cluster.subtree();
     
-    let sieve = KnnSieve::new(flat_tree.clone(), &data[0], 10).build();
+    let query_ind = rng.gen_range(0..data.len()); 
+    let k = rng.gen_range(0..100); 
+    let sieve = KnnSieve::new(flat_tree.clone(), &data[query_ind], k).build();
     let items = sieve
         .clusters
         .iter()
@@ -101,35 +111,37 @@ fn find_kth(c: &mut Criterion) {
         .map(|(&c, d)| (c, d))
         .collect::<Vec<_>>();
 
-    let diffs: Vec<usize> = (11..flat_tree.len() - 2).step_by(100).collect();
+    let diffs: Vec<usize> = ((k+1)..flat_tree.len() - 2).step_by(300).collect();
 
     for &diff in diffs.iter() {
-        let mut clusters_with_duplicates: Vec<&Cluster<f64, f64>> = vec![];
-        for distinct_cluster in &flat_tree[0..(diff + 1)] {
-            for _ in 0..distinct_cluster.cardinality(){
-                clusters_with_duplicates.push(distinct_cluster); }
-        }
-        let mut deltas_with_duplicates: Vec<f64> = vec![]; 
-        for distinct_delta in sieve.deltas {
-            for _ in 0..distinct_cluster.cardinality(){
-                deltas_with_duplicates.push(distinct_delta); }
-        }
+
+        let items_for_search = (&items[0..(diff + 1)])
+        .iter()
+        .fold(vec![], |mut it, i_| {
+            it.extend((0..i_.0.cardinality()).map(|_| (i_.0, i_.1)).collect::<Vec<(&Cluster<f64, f64>, f64)>>());
+
+            it
+        });
+
+        println!("Items with duplicates: {}", items_for_search.len());
 
         let kth_from_find_kth = _find_kth(items.clone()[0..(diff + 1)].to_vec(), sieve.cumulative_cardinalities.clone(), sieve.k, 0, diff);
-
+        println!("kth from find kth: {}", &kth_from_find_kth); 
         group.bench_with_input(BenchmarkId::new("find_kth", diff), &diff, |b, &diff| {
             b.iter(|| _find_kth(items.clone()[0..(diff + 1)].to_vec(), sieve.cumulative_cardinalities.clone(), sieve.k, 0, diff));
         });
 
-        let kth_from_sort = sort_and_index(&mut items.clone()[0..(diff + 1)], sieve.k);
+        let kth_from_sort = sort_and_index(&mut items_for_search.clone(), sieve.k);
+        println!("kth from sort: {}", &kth_from_sort); 
 
-        group.bench_with_input(BenchmarkId::new("sort", diff), &diff, |b, &diff| {
-            b.iter(|| sort_and_index(&mut clusters_with_duplicates.clone()[0..(diff + 1)], sieve.k));
+        group.bench_with_input(BenchmarkId::new("sort", diff), &diff, |b, &_diff| {
+            b.iter(|| sort_and_index(&mut items_for_search.clone(), sieve.k));
         });
 
-        group.bench_with_input(BenchmarkId::new("unstable_sort", diff), &diff, |b, &diff| {
-            b.iter(|| unstable_sort_and_index(&mut clusters_with_duplicates.clone()[0..(diff + 1)], sieve.k));
+        group.bench_with_input(BenchmarkId::new("unstable_sort", diff), &diff, |b, &_diff| {
+            b.iter(|| unstable_sort_and_index(&mut items_for_search.clone(), sieve.k));
         });
+
         assert_eq!(kth_from_find_kth, kth_from_sort);
     }
     group.finish();
