@@ -99,7 +99,7 @@ pub trait Dataset<T: Number, U: Number>: std::fmt::Debug + Send + Sync {
 
         // INVARIANT: After each iteration of the loop, the elements of the
         // subarray [0..i] are in the correct position.
-        for i in 0..n-1 {
+        for i in 0..n - 1 {
             source_index = indices[i];
 
             // If the element at is already at the correct position, we can
@@ -140,8 +140,8 @@ pub trait Dataset<T: Number, U: Number>: std::fmt::Debug + Send + Sync {
     /// The index of the geometric median of the set of indexed points
     fn median(&self, indices: &[usize]) -> usize {
         // TODO: Refactor this to scale for arbitrarily large n
-        indices[
-            self.pairwise(indices)
+        indices[self
+            .pairwise(indices)
             .into_iter()
             // TODO: Bench using .max instead of .sum
             // .map(|v| v.into_iter().max_by(|l, r| l.partial_cmp(r).unwrap()).unwrap())
@@ -150,7 +150,6 @@ pub trait Dataset<T: Number, U: Number>: std::fmt::Debug + Send + Sync {
             .min_by(|(_, l), (_, r)| l.partial_cmp(r).unwrap())
             .unwrap()
             .0]
-
     }
 }
 
@@ -216,8 +215,8 @@ impl<T: Number, U: Number> Dataset<T, U> for VecVec<T, U> {
 
 #[cfg(test)]
 mod tests {
+    use crate::distances::lp_norms::euclidean;
     use float_cmp::approx_eq;
-    use crate::utils::distances;
     use rand::Rng;
 
     use super::*;
@@ -225,7 +224,7 @@ mod tests {
     #[test]
     fn test_space() {
         let data = vec![vec![1_f32, 2., 3.], vec![3., 3., 1.]];
-        let metric = distances::euclidean::<f32, f32>;
+        let metric = euclidean::<f32, f32>;
         let name = "test".to_string();
         let dataset = VecVec::new(data, metric, name, false);
 
@@ -241,15 +240,17 @@ mod tests {
         let name = "test".to_string();
 
         for length in [100, 1_000, 10_000, 100_000] {
-            let reference_data: Vec<Vec<f32>> = (0..length).map(|_| {
-                vec![
-                    rng.gen_range(0.0..1000.0),
-                    rng.gen_range(0.0..1000.0),
-                    rng.gen_range(0.0..1000.0)
-                ]
-            }).collect();
+            let reference_data: Vec<Vec<f32>> = (0..length)
+                .map(|_| {
+                    vec![
+                        rng.gen_range(0.0..1000.0),
+                        rng.gen_range(0.0..1000.0),
+                        rng.gen_range(0.0..1000.0),
+                    ]
+                })
+                .collect();
 
-            let mut dataset = VecVec::new(reference_data.clone(), distances::euclidean::<f32, f32>, name.clone(), false);
+            let mut dataset = VecVec::new(reference_data.clone(), euclidean::<f32, f32>, name.clone(), false);
             let mut new_indices = dataset.indices();
             new_indices.shuffle(&mut rng);
 

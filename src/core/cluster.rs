@@ -637,12 +637,12 @@ mod tests {
     use crate::core::cluster::Cluster;
     use crate::core::cluster_criteria::PartitionCriteria;
     use crate::core::dataset::VecVec;
-    use crate::utils::distances;
+    use crate::distances::lp_norms::euclidean;
 
     #[test]
     fn test_cluster() {
         let data = vec![vec![0., 0., 0.], vec![1., 1., 1.], vec![2., 2., 2.], vec![3., 3., 3.]];
-        let metric = distances::euclidean::<f32, f32>;
+        let metric = euclidean::<f32, f32>;
         let name = "test".to_string();
         let space = VecVec::new(data, metric, name, false);
         let partition_criteria = PartitionCriteria::new(true).with_max_depth(3).with_min_cardinality(1);

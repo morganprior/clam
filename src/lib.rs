@@ -8,5 +8,6 @@
 
 pub mod anomaly;
 pub mod core;
+pub mod distances;
 pub mod search;
 pub mod utils;

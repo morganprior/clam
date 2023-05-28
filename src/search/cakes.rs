@@ -317,14 +317,14 @@ impl<T: Number> Ord for RevNumber<T> {
 #[cfg(test)]
 mod tests {
     use crate::core::dataset::VecVec;
-    use crate::utils::distances;
+    use crate::distances::lp_norms::euclidean;
 
     use super::*;
 
     #[test]
     fn test_search() {
         let data = vec![vec![0., 0.], vec![1., 1.], vec![2., 2.], vec![3., 3.]];
-        let metric = distances::euclidean::<f32, f32>;
+        let metric = euclidean::<f32, f32>;
         let name = "test".to_string();
         let dataset = VecVec::new(data, metric, name, false);
         let criteria = PartitionCriteria::new(true);
