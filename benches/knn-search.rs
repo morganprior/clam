@@ -39,6 +39,11 @@ fn cakes(c: &mut Criterion) {
             group.bench_with_input(id, &k, |b, &k| {
                 b.iter_with_large_drop(|| cakes.par_batch_knn_search(&queries, k));
             });
+
+            let id = BenchmarkId::new("par-1M-100", k);
+            group.bench_with_input(id, &k, |b, &k| {
+                b.iter_with_large_drop(|| cakes.batch_knn_by_thresholds(&queries, k));
+            });
         }
 
         group.finish();

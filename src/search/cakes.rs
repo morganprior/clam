@@ -208,13 +208,22 @@ impl<'a, T: Number, U: Number, D: Dataset<T, U>> CAKES<'a, T, U, D> {
         }
     }
 
-    // pub fn knn_search(&self, query: &[T], k: usize) -> Vec<(usize, U)> {
-    //     let mut sieve = KnnSieve::new(&self.root, query, k);
-    //     while !sieve.is_refined() {
-    //         sieve.refine_step();
-    //     }
-    //     sieve.extract()
-    // }
+    #[inline(never)]
+    pub fn batch_knn_by_thresholds(&'a self, queries: &[&[T]], k: usize) -> Vec<Vec<(usize, U)>> {
+        queries
+            // .par_iter()
+            .iter()
+            .map(|&q| self.knn_by_thresholds(q, k))
+            .collect()
+    }
+
+    pub fn knn_by_thresholds(&self, query: &[T], k: usize) -> Vec<(usize, U)> {
+        let mut sieve = KnnSieve::new(&self.root, query, k);
+        while !sieve.is_refined() {
+            sieve.refine_step();
+        }
+        sieve.extract()
+    }
 
     #[inline(never)]
     pub fn batch_knn_by_rnn(&'a self, queries: &[&[T]], k: usize) -> Vec<Vec<(usize, U)>> {
