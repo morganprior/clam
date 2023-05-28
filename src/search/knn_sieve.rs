@@ -1,6 +1,8 @@
 use crate::core::cluster::Cluster;
 use crate::core::dataset::Dataset;
 use crate::core::number::Number;
+use std::cmp::Ordering;
+
 
 #[allow(dead_code)]
 pub struct KnnSieve<'a, T: Number, U: Number, D: Dataset<T, U>> {
@@ -64,7 +66,7 @@ impl<'a, T: Number, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, D> {
         // Filters grains by being outside the threshold.
         // Ties are added to hits together; we will never remove too many instances here
         // because our choice of threshold guaruntees enough instances.
-        while !self.hits.is_empty() && self.hits.peek_max().unwrap().1 > threshold {
+        while !self.hits.is_empty() && self.hits.peek_max().unwrap().1.number > threshold {
             self.hits.pop_max().unwrap();
         }
 
@@ -72,7 +74,7 @@ impl<'a, T: Number, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, D> {
         // where we filter for grains being outside the threshold could be made more
         // efficient by leveraging the fact that parition already puts items on the correct
         // side of the threshold element
-        let (mut insiders, mut straddlers) = grains
+        let (mut insiders, mut straddlers): (Vec<_>, Vec<_>) = grains
             .drain(..)
             .filter(|g| !Grain::is_outside(g, threshold))
             .partition(|g| Grain::is_inside(g, threshold));
@@ -89,7 +91,7 @@ impl<'a, T: Number, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, D> {
                     // .into_par_iter()
                     .into_iter()
                     .map(|i| (i, self.dataset.query_to_one(self.query, i)))
-                    .map(|(i, d)| (i, OrdNumber(d)))
+                    .map(|(i, d)| (i, OrdNumber{ number: d }))
                     .collect::<Vec<_>>();
             self.hits.extend(new_hits.into_iter());
         });
@@ -109,7 +111,7 @@ impl<'a, T: Number, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, D> {
                         // .into_par_iter()
                         .into_iter()
                         .map(|i| (i, self.dataset.query_to_one(self.query, i)))
-                        .map(|(i, d)| (i, OrdNumber(d)))
+                        .map(|(i, d)| (i, OrdNumber{ number: d }))
                         .collect::<Vec<_>>();
                 self.hits.extend(new_hits.into_iter());
             });
@@ -117,7 +119,7 @@ impl<'a, T: Number, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, D> {
                 let mut potential_ties = vec![self.hits.pop_max().unwrap()];
                 while self.hits.len() >= self.k {
                     let item = self.hits.pop_max().unwrap();
-                    if item.1 < potential_ties.last().unwrap().1 {
+                    if item.1.number < potential_ties.last().unwrap().1.number {
                         potential_ties.clear();
                     }
                     potential_ties.push(item);
@@ -247,24 +249,52 @@ impl<'a, T: Number, U: Number, D: Dataset<T, U>> Grain<'a, T, U, D> {
 }
 
 #[derive(Debug)]
-struct OrdNumber<U: Number>(U);
+//Having a lot of comparison issues, so I reverted this back to the way it was
+
+// struct OrdNumber<U: Number>(U);
+
+// impl<U: Number> PartialEq for OrdNumber<U> {
+//     fn eq(&self, other: &Self) -> bool {
+//         self.0 == other.0
+//     }
+// }
+
+// impl<U: Number> Eq for OrdNumber<U> {}
+
+// impl<U: Number> PartialOrd for OrdNumber<U> {
+//     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+//         self.0.partial_cmp(&other.0)
+//     }
+// }
+
+// impl<U: Number> Ord for OrdNumber<U> {
+//     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+//         self.partial_cmp(other).unwrap()
+//     }
+// }
+
+
+
+pub struct OrdNumber<U: Number> {
+    pub number: U,
+}
 
 impl<U: Number> PartialEq for OrdNumber<U> {
     fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
+        self.number == other.number
     }
 }
 
 impl<U: Number> Eq for OrdNumber<U> {}
 
 impl<U: Number> PartialOrd for OrdNumber<U> {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.0.partial_cmp(&other.0)
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.number.partial_cmp(&other.number)
     }
 }
 
 impl<U: Number> Ord for OrdNumber<U> {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+    fn cmp(&self, other: &Self) -> Ordering {
         self.partial_cmp(other).unwrap()
     }
 }
