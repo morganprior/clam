@@ -221,6 +221,7 @@ impl<'a, T: Number, U: Number, D: Dataset<T, U>> CAKES<'a, T, U, D> {
 
     pub fn knn_by_thresholds(&self, query: &[T], k: usize) -> Vec<(usize, U)> {
         let mut sieve = KnnSieve::new(&self.root, query, k);
+        sieve.initialize_grains();
         while !sieve.is_refined() {
             sieve.refine_step();
         }

@@ -29,7 +29,7 @@ fn cakes(c: &mut Criterion) {
 
         let queries = (0..num_queries).map(|i| &queries[i]).collect::<Vec<_>>();
 
-        for k in [1, 5, 10] {
+        for k in [1, 10, 100] {
             let id = BenchmarkId::new("1M-100", k);
             group.bench_with_input(id, &k, |b, &k| {
                 b.iter_with_large_drop(|| cakes.batch_knn_search(&queries, k));

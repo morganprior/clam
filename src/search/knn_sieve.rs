@@ -9,7 +9,9 @@ pub struct KnnSieve<'a, T: Number, U: Number, D: Dataset<T, U>> {
     dataset: &'a dyn Dataset<T, U>,
     query: &'a [T],
     k: usize,
-    layer: Vec<&'a Cluster<'a, T, U, D>>,
+    //layer: Vec<&'a Cluster<'a, T, U, D>>,
+    grains: Vec<Grain<'a, T, U, D>>,
+    root:  &'a Cluster<'a, T, U, D>,
     leaves: Vec<Grain<'a, T, U, D>>,
     is_refined: bool,
     hits: priority_queue::DoublePriorityQueue<usize, OrdNumber<U>>,
@@ -21,11 +23,41 @@ impl<'a, T: Number, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, D> {
             dataset: root.dataset(),
             query,
             k,
-            layer: vec![root],
+            //layer: vec![root],
+            root,
+            grains: Vec::new(),
             leaves: Vec::new(),
             is_refined: false,
             hits: Default::default(),
         }
+    }
+
+    pub fn initialize_grains(&mut self) {
+        let mut layer = vec![self.root];
+        let centers = layer.iter().map(|c| c.arg_center()).collect::<Vec<_>>();
+        let distances = self.dataset.query_to_many(self.query, &centers);
+
+        self.grains = layer
+        .drain(..)
+        .zip(distances.iter())
+        .flat_map(|(c, &d)| {
+            if c.is_singleton() {
+                // If the radius is 0, we take every instance in the cluster or no instance in the cluster.
+                vec![Grain::new(c, d, c.cardinality())]
+            } else {
+                // If radius is non-zero, we may only take a subset of the cluster.
+                // We are guarunteed one point (the center) a distance d from the query.
+                // We are guarunteed cardinality-1 other points a distance of d+radius from the query,
+                // as this reflects the "worst case scenario" for an instance's position within the cluster.
+                let g = Grain::new(c, d, 1);
+                let g_max = Grain::new(c, d + c.radius(), c.cardinality() - 1);
+                vec![g, g_max]
+            }
+        })
+        .chain(self.leaves.drain(..))
+        .collect::<Vec<_>>();
+
+
     }
 
     pub fn is_refined(&self) -> bool {
@@ -33,34 +65,34 @@ impl<'a, T: Number, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, D> {
     }
 
     pub fn refine_step(&mut self) {
-        let centers = self.layer.iter().map(|c| c.arg_center()).collect::<Vec<_>>();
-        let distances = self.dataset.query_to_many(self.query, &centers);
+        // let centers = self.layer.iter().map(|c| c.arg_center()).collect::<Vec<_>>();
+        // let distances = self.dataset.query_to_many(self.query, &centers);
 
-        let mut grains = self
-            .layer
-            .drain(..)
-            .zip(distances.iter())
-            .flat_map(|(c, &d)| {
-                if c.is_singleton() {
-                    // If the radius is 0, we take every instance in the cluster or no instance in the cluster.
-                    vec![Grain::new(c, d, c.cardinality())]
-                } else {
-                    // If radius is non-zero, we may only take a subset of the cluster.
-                    // We are guarunteed one point (the center) a distance d from the query.
-                    // We are guarunteed cardinality-1 other points a distance of d+radius from the query,
-                    // as this reflects the "worst case scenario" for an instance's position within the cluster.
-                    let g = Grain::new(c, d, 1);
-                    let g_max = Grain::new(c, d + c.radius(), c.cardinality() - 1);
-                    vec![g, g_max]
-                }
-            })
-            .chain(self.leaves.drain(..))
-            .collect::<Vec<_>>();
+        // let mut grains = self
+        //     .layer
+        //     .drain(..)
+        //     .zip(distances.iter())
+        //     .flat_map(|(c, &d)| {
+        //         if c.is_singleton() {
+        //             // If the radius is 0, we take every instance in the cluster or no instance in the cluster.
+        //             vec![Grain::new(c, d, c.cardinality())]
+        //         } else {
+        //             // If radius is non-zero, we may only take a subset of the cluster.
+        //             // We are guarunteed one point (the center) a distance d from the query.
+        //             // We are guarunteed cardinality-1 other points a distance of d+radius from the query,
+        //             // as this reflects the "worst case scenario" for an instance's position within the cluster.
+        //             let g = Grain::new(c, d, 1);
+        //             let g_max = Grain::new(c, d + c.radius(), c.cardinality() - 1);
+        //             vec![g, g_max]
+        //         }
+        //     })
+        //     .chain(self.leaves.drain(..))
+        //     .collect::<Vec<_>>();
 
         //do we also need to chain hits here before partitioning??
 
-        let i = Grain::partition_kth(&mut grains, self.k);
-        let threshold = grains[i].d;
+        let i = Grain::partition_kth(&mut self.grains, self.k);
+        let threshold = self.grains[i].d;
         // let num_guaranteed = grains[..=i].iter().map(|g| g.multiplicity).sum::<usize>();
 
         // Filters grains by being outside the threshold.
@@ -74,7 +106,7 @@ impl<'a, T: Number, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, D> {
         // where we filter for grains being outside the threshold could be made more
         // efficient by leveraging the fact that parition already puts items on the correct
         // side of the threshold element
-        let (mut insiders, mut straddlers): (Vec<_>, Vec<_>) = grains
+        let (mut insiders, mut straddlers): (Vec<_>, Vec<_>) = self.grains
             .drain(..)
             .filter(|g| !Grain::is_outside(g, threshold))
             .partition(|g| Grain::is_inside(g, threshold));
@@ -128,19 +160,18 @@ impl<'a, T: Number, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, D> {
             }
             self.is_refined = true;
         } else {
-            grains = insiders.drain(..).chain(straddlers.drain(..)).collect();
-            let (leaves, non_leaves): (Vec<_>, Vec<_>) = grains.drain(..).partition(|g| g.c.is_leaf());
+            self.grains = insiders.drain(..).chain(straddlers.drain(..)).collect();
+            let (leaves, non_leaves): (Vec<_>, Vec<_>) = self.grains.drain(..).partition(|g| g.c.is_leaf());
 
             let children = non_leaves
                 // .into_par_iter()
                 .into_iter()
-                .flat_map(|g| g.c.children())
-                // .map(|c| (c, self.dataset.query_to_one(self.query, c.arg_center())))
-                // .map(|(c, d)| Grain::new(c, d, %multiplicity argument%))
-                .flatten()
+                .flat_map(|g| g.c.children()).flatten()
+                .map(|c| (c, self.dataset.query_to_one(self.query, c.arg_center())))
+                .map(|(c, d)| [Grain::new(c, d, 1), Grain::new(c, d + c.radius(), c.cardinality()-1)]).flatten()
                 .collect::<Vec<_>>();
 
-            self.layer = leaves.into_iter().map(|g| g.c).chain(children.into_iter()).collect();
+            self.grains = leaves.into_iter().map(|g| g.c).chain(children.into_iter()).collect();
         }
         
     }
