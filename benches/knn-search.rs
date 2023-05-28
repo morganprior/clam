@@ -18,10 +18,10 @@ fn cakes(c: &mut Criterion) {
 
         group.sampling_mode(SamplingMode::Flat);
 
-        let num_queries = 10_000;
+        let num_queries = 100;
         group.throughput(Throughput::Elements(num_queries as u64));
 
-        let (data, queries, name) = utils::make_data(1_000, 100, num_queries);
+        let (data, queries, name) = utils::make_data(100, 100, num_queries);
         let criteria = PartitionCriteria::new(true).with_min_cardinality(1);
 
         let data = VecVec::new(data, metric, name, false);
@@ -29,7 +29,7 @@ fn cakes(c: &mut Criterion) {
 
         let queries = (0..num_queries).map(|i| &queries[i]).collect::<Vec<_>>();
 
-        for k in [1, 10, 100] {
+        for k in [1, 10, 20] {
             let id = BenchmarkId::new("1M-100", k);
             group.bench_with_input(id, &k, |b, &k| {
                 b.iter_with_large_drop(|| cakes.batch_knn_search(&queries, k));
