@@ -7,6 +7,8 @@ use crate::core::cluster_criteria::PartitionCriteria;
 use crate::core::dataset::Dataset;
 use crate::core::number::Number;
 use crate::utils::helpers;
+use crate::search::knn_sieve::KnnSieve; 
+
 
 #[derive(Debug)]
 pub struct CAKES<'a, T: Number, U: Number, D: Dataset<T, U>> {
@@ -209,7 +211,7 @@ impl<'a, T: Number, U: Number, D: Dataset<T, U>> CAKES<'a, T, U, D> {
     }
 
     #[inline(never)]
-    pub fn batch_knn_by_thresholds(&'a self, queries: &[&[T]], k: usize) -> Vec<Vec<(usize, U)>> {
+    pub fn batch_knn_by_thresholds(&'a self, queries: &[&Vec<T>], k: usize) -> Vec<Vec<(usize, U)>> {
         queries
             // .par_iter()
             .iter()

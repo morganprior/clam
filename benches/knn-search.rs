@@ -18,7 +18,7 @@ fn cakes(c: &mut Criterion) {
 
         group.sampling_mode(SamplingMode::Flat);
 
-        let num_queries = 100;
+        let num_queries = 5;
         group.throughput(Throughput::Elements(num_queries as u64));
 
         let (data, queries, name) = utils::make_data(100, 100, num_queries);
@@ -29,18 +29,18 @@ fn cakes(c: &mut Criterion) {
 
         let queries = (0..num_queries).map(|i| &queries[i]).collect::<Vec<_>>();
 
-        for k in [1, 10, 20] {
+        for k in [1, 5, 10] {
             let id = BenchmarkId::new("1M-100", k);
             group.bench_with_input(id, &k, |b, &k| {
                 b.iter_with_large_drop(|| cakes.batch_knn_search(&queries, k));
             });
 
-            let id = BenchmarkId::new("par-1M-100", k);
-            group.bench_with_input(id, &k, |b, &k| {
-                b.iter_with_large_drop(|| cakes.par_batch_knn_search(&queries, k));
-            });
+            // let id = BenchmarkId::new("par-1M-100", k);
+            // group.bench_with_input(id, &k, |b, &k| {
+            //     b.iter_with_large_drop(|| cakes.par_batch_knn_search(&queries, k));
+            // });
 
-            let id = BenchmarkId::new("par-1M-100", k);
+            let id = BenchmarkId::new("thresholds-1M-100", k);
             group.bench_with_input(id, &k, |b, &k| {
                 b.iter_with_large_drop(|| cakes.batch_knn_by_thresholds(&queries, k));
             });

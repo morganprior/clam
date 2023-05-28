@@ -61,7 +61,7 @@ impl<'a, T: Number, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, D> {
 
         let i = Grain::partition_kth(&mut grains, self.k);
         let threshold = grains[i].d;
-        let num_guaranteed = grains[..=i].iter().map(|g| g.multiplicity).sum::<usize>();
+        // let num_guaranteed = grains[..=i].iter().map(|g| g.multiplicity).sum::<usize>();
 
         // Filters grains by being outside the threshold.
         // Ties are added to hits together; we will never remove too many instances here
@@ -131,7 +131,7 @@ impl<'a, T: Number, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, D> {
             grains = insiders.drain(..).chain(straddlers.drain(..)).collect();
             let (leaves, non_leaves): (Vec<_>, Vec<_>) = grains.drain(..).partition(|g| g.c.is_leaf());
 
-            let mut children = non_leaves
+            let children = non_leaves
                 // .into_par_iter()
                 .into_iter()
                 .flat_map(|g| g.c.children())
@@ -146,7 +146,7 @@ impl<'a, T: Number, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, D> {
     }
 
     pub fn extract(&self) -> Vec<(usize, U)> {
-        todo!()
+        self.hits.iter().map(|(i, d)| (*i, d.number)).collect()
     }
 }
 
@@ -164,6 +164,7 @@ impl<'a, T: Number, U: Number, D: Dataset<T, U>> Grain<'a, T, U, D> {
         Self { t, c, d, multiplicity }
     }
 
+    #[allow(dead_code)]
     /// A Grain is "straddling" the threshold if it could have at least one point which is a distance less than the
     /// threshold distance from the query and at least one point which is a distance greater than or equal to the
     /// threshold distance from the query, i.e., if it is neither inside nor outside the threshold.
