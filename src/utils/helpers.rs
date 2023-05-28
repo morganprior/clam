@@ -5,6 +5,15 @@ use rand::prelude::*;
 
 use crate::core::number::Number;
 
+/// Generate a randomized tabular dataset for use in benchmarks and tests.
+///
+/// # Arguments:
+///
+/// * `cardinality`: number of points to generate.
+/// * `dimensionality`: dimensionality of points to generate.
+/// * `min_val`: of each axis in the hypercube
+/// * `max_val`: of each axis in the hypercube
+/// * `seed`: for the random number generator
 pub fn gen_data_f32(cardinality: usize, dimensionality: usize, min_val: f32, max_val: f32, seed: u64) -> Vec<Vec<f32>> {
     let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
     (0..cardinality)
@@ -12,6 +21,15 @@ pub fn gen_data_f32(cardinality: usize, dimensionality: usize, min_val: f32, max
         .collect()
 }
 
+/// Generate a randomized tabular dataset for use in benchmarks and tests.
+///
+/// # Arguments:
+///
+/// * `cardinality`: number of points to generate.
+/// * `dimensionality`: dimensionality of points to generate.
+/// * `min_val`: of each axis in the hypercube
+/// * `max_val`: of each axis in the hypercube
+/// * `seed`: for the random number generator
 pub fn gen_data_f64(cardinality: usize, dimensionality: usize, min_val: f64, max_val: f64, seed: u64) -> Vec<Vec<f64>> {
     let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
     (0..cardinality)
@@ -19,6 +37,7 @@ pub fn gen_data_f64(cardinality: usize, dimensionality: usize, min_val: f64, max
         .collect()
 }
 
+/// Return the index and value of the minimum value in the given slice of values.
 pub fn arg_min<T: PartialOrd + Copy>(values: &[T]) -> (usize, T) {
     let (i, v) = values
         .iter()
@@ -28,6 +47,7 @@ pub fn arg_min<T: PartialOrd + Copy>(values: &[T]) -> (usize, T) {
     (i, *v)
 }
 
+/// Return the index and value of the maximum value in the given slice of values.
 pub fn arg_max<T: PartialOrd + Copy>(values: &[T]) -> (usize, T) {
     let (i, v) = values
         .iter()
@@ -37,10 +57,12 @@ pub fn arg_max<T: PartialOrd + Copy>(values: &[T]) -> (usize, T) {
     (i, *v)
 }
 
+/// Return the mean value of the given slice of values.
 pub fn mean<T: Number>(values: &[T]) -> f64 {
     values.iter().copied().sum::<T>().as_f64() / values.len().as_f64()
 }
 
+/// Return the standard deviation value of the given slice of values.
 pub fn sd<T: Number>(values: &[T], mean: f64) -> f64 {
     values
         .iter()
@@ -52,6 +74,7 @@ pub fn sd<T: Number>(values: &[T], mean: f64) -> f64 {
         / values.len().as_f64()
 }
 
+/// Apply Gaussian normalization to the given values.
 pub fn normalize_1d(values: &[f64]) -> Vec<f64> {
     let mean = mean(values);
     let std = (EPSILON + sd(values, mean)) * SQRT_2;
