@@ -40,8 +40,13 @@ impl<'a, T: Number, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, D> {
             .zip(distances.iter())
             .flat_map(|(c, &d)| {
                 if c.is_singleton() {
+                    // If the radius is 0, we take every instance in the cluster or no instance in the cluster.
                     vec![Grain::new(c, d, c.cardinality())]
                 } else {
+                    // If radius is non-zero, we may only take a subset of the cluster.
+                    // We are guarunteed one point (the center) a distance d from the query.
+                    // We are guarunteed cardinality-1 other points a distance of d+radius from the query,
+                    // as this reflects the "worst case scenario" for an instance's position within the cluster.
                     let g = Grain::new(c, d, 1);
                     let g_max = Grain::new(c, d + c.radius(), c.cardinality() - 1);
                     vec![g, g_max]
@@ -50,21 +55,92 @@ impl<'a, T: Number, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, D> {
             .chain(self.leaves.drain(..))
             .collect::<Vec<_>>();
 
+        //do we also need to chain hits here before partitioning??
+
         let i = Grain::partition_kth(&mut grains, self.k);
-        // let threshold = grains[i].d;
+        let threshold = grains[i].d;
         let num_guaranteed = grains[..=i].iter().map(|g| g.multiplicity).sum::<usize>();
 
-        // TODO: Filter grains by being outside the threshold
+        // Filters grains by being outside the threshold.
+        // Ties are added to hits together; we will never remove too many instances here
+        // because our choice of threshold guaruntees enough instances.
+        while !self.hits.is_empty() && self.hits.peek_max().unwrap().1 > threshold {
+            self.hits.pop_max().unwrap();
+        }
+
         // partition into insiders and straddlers
+        // where we filter for grains being outside the threshold could be made more
+        // efficient by leveraging the fact that parition already puts items on the correct
+        // side of the threshold element
+        let (mut insiders, mut straddlers) = grains
+            .drain(..)
+            .filter(|g| !Grain::is_outside(g, threshold))
+            .partition(|g| Grain::is_inside(g, threshold));
+
+        // distinguish between those insiders we won't partition further and those we will
+        // add instances from insiders we won't further partition to hits
+        let (small_insiders, big_insiders): (Vec<_>, Vec<_>) = insiders
+            .drain(..)
+            .partition(|g| (g.c.cardinality() <= self.k) || g.c.is_leaf());
+        insiders = big_insiders;
+        small_insiders.into_iter().for_each(|g| {
+            let new_hits =
+                g.c.indices()
+                    // .into_par_iter()
+                    .into_iter()
+                    .map(|i| (i, self.dataset.query_to_one(self.query, i)))
+                    .map(|(i, d)| (i, OrdNumber(d)))
+                    .collect::<Vec<_>>();
+            self.hits.extend(new_hits.into_iter());
+        });
+
         // descend into straddlers
 
-        assert!(
-            num_guaranteed >= self.k,
-            "Too few guarantees: {num_guaranteed} vs {}.",
-            self.k
-        );
+        // If there are no straddlers all of the straddlers are leaves, then the grains in insiders and straddlers
+        // are added to hits. If there are more than k hits, we repeatedly remove the furthest instance in hits until
+        // there are either k hits left or more than k hits with some ties (distinct instances which are
+        // the same distance from the query)
+        //
+        // If straddlers is not empty nor all leaves, partition non-leaves into children
+        if straddlers.is_empty() || straddlers.iter().all(|g| g.c.is_leaf()) {
+            insiders.drain(..).chain(straddlers.drain(..)).for_each(|g| {
+                let new_hits =
+                    g.c.indices()
+                        // .into_par_iter()
+                        .into_iter()
+                        .map(|i| (i, self.dataset.query_to_one(self.query, i)))
+                        .map(|(i, d)| (i, OrdNumber(d)))
+                        .collect::<Vec<_>>();
+                self.hits.extend(new_hits.into_iter());
+            });
+            if self.hits.len() > self.k {
+                let mut potential_ties = vec![self.hits.pop_max().unwrap()];
+                while self.hits.len() >= self.k {
+                    let item = self.hits.pop_max().unwrap();
+                    if item.1 < potential_ties.last().unwrap().1 {
+                        potential_ties.clear();
+                    }
+                    potential_ties.push(item);
+                }
+                self.hits.extend(potential_ties.drain(..));
+            }
+            self.is_refined = true;
+        } else {
+            grains = insiders.drain(..).chain(straddlers.drain(..)).collect();
+            let (leaves, non_leaves): (Vec<_>, Vec<_>) = grains.drain(..).partition(|g| g.c.is_leaf());
 
-        todo!()
+            let mut children = non_leaves
+                // .into_par_iter()
+                .into_iter()
+                .flat_map(|g| g.c.children())
+                // .map(|c| (c, self.dataset.query_to_one(self.query, c.arg_center())))
+                // .map(|(c, d)| Grain::new(c, d, %multiplicity argument%))
+                .flatten()
+                .collect::<Vec<_>>();
+
+            self.layer = leaves.into_iter().map(|g| g.c).chain(children.into_iter()).collect();
+        }
+        
     }
 
     pub fn extract(&self) -> Vec<(usize, U)> {
@@ -84,6 +160,27 @@ impl<'a, T: Number, U: Number, D: Dataset<T, U>> Grain<'a, T, U, D> {
     fn new(c: &'a Cluster<'a, T, U, D>, d: U, multiplicity: usize) -> Self {
         let t = Default::default();
         Self { t, c, d, multiplicity }
+    }
+
+    /// A Grain is "straddling" the threshold if it could have at least one point which is a distance less than the
+    /// threshold distance from the query and at least one point which is a distance greater than or equal to the
+    /// threshold distance from the query, i.e., if it is neither inside nor outside the threshold.
+    fn is_straddling(&self, threshold: U) -> bool {
+        !(self.is_inside(threshold) || self.is_outside(threshold))
+    }
+
+    /// A Grain is "inside" the threshold if the furthest, worst-case possible point is at most as far as
+    /// threshold distance from the query, i.e., if d_max is greater than or equal to the threshold distance
+    fn is_inside(&self, threshold: U) -> bool {
+        let d_max = self.d + self.c.radius(); 
+        d_max <= threshold
+    }
+
+    /// A Grain is "outside" the threshold if the closest, best-case possible point is further than
+    /// the threshold distance to the query, i.e., if d_min is less than the threshold distance
+    fn is_outside(&self, threshold: U) -> bool {
+        let d_min = if self.d < self.c.radius() {U::zero()} else {self.d - self.c.radius()}; 
+        d_min > threshold
     }
 
     fn partition_kth(grains: &mut [Self], k: usize) -> usize {
