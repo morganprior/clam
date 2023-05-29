@@ -66,3 +66,21 @@ pub fn levenshtein<T: Number, U: Number>(x: &[T], y: &[T]) -> U {
         U::from(cur[len_y - 1]).unwrap()
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+    use crate::distances::misc::levenshtein; 
+
+
+    #[test]
+    fn test_levenshtein() {
+        let x = [0, 1, 2, 2, 1, 3, 4]; 
+        let y = [5, 1, 2, 2, 6, 3]; 
+        
+        let lev: i32 = levenshtein(&x, &y); 
+
+        assert_eq!(lev, 3)
+        
+        }
+    }
