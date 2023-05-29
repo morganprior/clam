@@ -168,10 +168,15 @@ impl<'a, T: Number, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, D> {
                 .into_iter()
                 .flat_map(|g| g.c.children()).flatten()
                 .map(|c| (c, self.dataset.query_to_one(self.query, c.arg_center())))
-                .map(|(c, d)| [Grain::new(c, d, 1), Grain::new(c, d + c.radius(), c.cardinality()-1)]).flatten()
+                .map(|(c, d)| {
+                    let g = Grain::new(c, d, 1);
+                    let g_max = Grain::new(c, d + c.radius(), c.cardinality() - 1);
+                    vec![g, g_max]
+                })
+                .flatten()
                 .collect::<Vec<_>>();
 
-            self.grains = leaves.into_iter().map(|g| g.c).chain(children.into_iter()).collect();
+            self.grains = leaves.into_iter().chain(children.into_iter()).collect();
         }
         
     }
