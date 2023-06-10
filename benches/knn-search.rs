@@ -16,7 +16,7 @@ fn cakes(c: &mut Criterion) {
 
         group.sampling_mode(SamplingMode::Flat);
 
-        let num_queries = 10_000;
+        let num_queries = 5;
         group.throughput(Throughput::Elements(num_queries as u64));
 
         let seed = 42;
@@ -26,17 +26,26 @@ fn cakes(c: &mut Criterion) {
 
         let dataset = VecVec::new(data, metric, "100k-10".to_string(), false);
         let criteria = PartitionCriteria::new(true).with_min_cardinality(1);
-        let cakes = CAKES::new(dataset, Some(seed)).build(&criteria);
+
+        let data = VecVec::new(data, metric, "CAKES-Bench".to_string(), false);
+        let cakes = CAKES::new(data, Some(42)).build(&criteria);
+
+        let queries = (0..num_queries).map(|i| &queries[i]).collect::<Vec<_>>();
 
         for k in [1, 10, 100] {
-            let id = BenchmarkId::new("100k-10", k);
+            let id = BenchmarkId::new("1M-100", k);
             group.bench_with_input(id, &k, |b, &k| {
                 b.iter_with_large_drop(|| cakes.batch_knn_search(&queries, k));
             });
 
-            let id = BenchmarkId::new("par-100k-10", k);
+            // let id = BenchmarkId::new("par-1M-100", k);
+            // group.bench_with_input(id, &k, |b, &k| {
+            //     b.iter_with_large_drop(|| cakes.par_batch_knn_search(&queries, k));
+            // });
+
+            let id = BenchmarkId::new("thresholds-1M-100", k);
             group.bench_with_input(id, &k, |b, &k| {
-                b.iter_with_large_drop(|| cakes.par_batch_knn_search(&queries, k));
+                b.iter_with_large_drop(|| cakes.batch_knn_by_thresholds(&queries, k));
             });
         }
 

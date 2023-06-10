@@ -8,6 +8,8 @@ use crate::core::dataset::Dataset;
 use crate::core::number::Number;
 use crate::utils::helpers;
 
+use super::knn_sieve::KnnSieve;
+
 #[derive(Debug)]
 pub struct CAKES<T: Number, U: Number, D: Dataset<T, U>> {
     tree: Tree<T, U, D>,
@@ -211,13 +213,23 @@ impl<T: Number, U: Number, D: Dataset<T, U>> CAKES<T, U, D> {
         }
     }
 
-    // pub fn knn_search(&self, query: &[T], k: usize) -> Vec<(usize, U)> {
-    //     let mut sieve = KnnSieve::new(&self.root, query, k);
-    //     while !sieve.is_refined() {
-    //         sieve.refine_step();
-    //     }
-    //     sieve.extract()
-    // }
+    #[inline(never)]
+    pub fn batch_knn_by_thresholds(&self, queries: &[&Vec<T>], k: usize) -> Vec<Vec<(usize, U)>> {
+        queries
+            // .par_iter()
+            .iter()
+            .map(|&q| self.knn_by_thresholds(q, k))
+            .collect()
+    }
+
+    pub fn knn_by_thresholds(&self, query: &[T], k: usize) -> Vec<(usize, U)> {
+        let mut sieve = KnnSieve::new(&self.tree, query, k);
+        sieve.initialize_grains();
+        while !sieve.is_refined() {
+            sieve.refine_step();
+        }
+        sieve.extract()
+    }
 
     #[inline(never)]
     pub fn batch_knn_by_rnn(&self, queries: &[&[T]], k: usize) -> Vec<Vec<(usize, U)>> {

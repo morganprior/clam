@@ -7,9 +7,9 @@
 //!
 
 // pub mod anomaly;
+pub mod cakes;
 mod core;
 pub mod distances;
-pub mod search;
 pub mod utils;
 
 pub use crate::core::{cluster, dataset, graph, number};

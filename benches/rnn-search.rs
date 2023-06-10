@@ -24,9 +24,9 @@ fn cakes(c: &mut Criterion) {
         let queries = synthetic_data::random_f32(num_queries, 10, 0., 1., seed);
         let queries = queries.iter().collect::<Vec<_>>();
 
-        let dataset = VecVec::new(data, metric, "100k-10".to_string(), false);
+        let data = VecVec::new(data, metric, "100k-10".to_string(), false);
         let criteria = PartitionCriteria::new(true).with_min_cardinality(1);
-        let cakes = CAKES::new(dataset, Some(seed)).build(&criteria);
+        let cakes = CAKES::new(data, Some(seed)).build(&criteria);
 
         for n in (0..=100).step_by(10) {
             let radius = (n as f32) / if metric_name == "cosine" { 10_000. } else { 1_000. };
