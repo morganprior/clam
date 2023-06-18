@@ -16,7 +16,6 @@ pub struct KnnSieve<'a, T: Number, U: Number, D: Dataset<T, U>> {
 }
 
 impl<'a, T: Number, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, D> {
-    //pub fn new(root: &'a Cluster<U>, query: &'a [T], k: usize) -> Self {
     pub fn new(tree: &'a Tree<T, U, D>, query: &'a [T], k: usize) -> Self {
         Self {
             tree,
@@ -116,7 +115,7 @@ impl<'a, T: Number, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, D> {
         small_insiders.into_iter().for_each(|g| {
             let new_hits =
                 g.c.indices(self.tree.data())
-                    // .par_iter()
+                    //.par_iter()
                     .iter()
                     .map(|&i| (i, self.tree.data().query_to_one(self.query, i)))
                     .map(|(i, d)| (i, OrdNumber { number: d }))

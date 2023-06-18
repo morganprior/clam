@@ -684,9 +684,9 @@ impl<T: Number, U: Number, D: Dataset<T, U>> Cluster<T, U, D> {
 
 #[cfg(test)]
 mod tests {
+    use crate::cluster::Tree;
     use crate::dataset::{Dataset, VecVec};
     use crate::distances;
-    use crate::cluster::Tree;
 
     use super::*;
 
