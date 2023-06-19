@@ -84,7 +84,8 @@ impl<'a, T: Number, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, D> {
 
         let i = Grain::partition_kth(&mut self.grains, self.k);
         let threshold = self.grains[i].d;
-        // let num_guaranteed = grains[..=i].iter().map(|g| g.multiplicity).sum::<usize>();
+        let num_guaranteed = self.grains[..=i].iter().map(|g| g.multiplicity).sum::<usize>();
+        assert!(num_guaranteed >= self.k);
 
         // Filters grains by being outside the threshold.
         // Ties are added to hits together; we will never remove too many instances here
@@ -112,7 +113,6 @@ impl<'a, T: Number, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, D> {
         small_insiders.into_iter().for_each(|g| {
             let new_hits =
                 g.c.indices(self.tree.data())
-                    //.par_iter()
                     .iter()
                     .map(|&i| (i, self.tree.data().query_to_one(self.query, i)))
                     .map(|(i, d)| (i, OrdNumber { number: d }))

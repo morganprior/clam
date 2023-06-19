@@ -276,7 +276,7 @@ impl<T: Number, U: Number, D: Dataset<T, U>> CAKES<T, U, D> {
     }
 
     pub fn linear_search(&self, query: &[T], radius: U, indices: Option<&[usize]>) -> Vec<(usize, U)> {
-        let indices = indices.unwrap_or_else(|| self.tree.root().indices(self.data()));
+        let indices = indices.unwrap_or_else(|| self.data().indices());
         let distances = self.data().query_to_many(query, indices);
         indices
             .iter()
@@ -287,7 +287,7 @@ impl<T: Number, U: Number, D: Dataset<T, U>> CAKES<T, U, D> {
     }
 
     pub fn linear_search_knn(&self, query: &[T], k: usize, indices: Option<&[usize]>) -> Vec<(usize, U)> {
-        let indices = indices.unwrap_or_else(|| self.tree.root().indices(self.data()));
+        let indices = indices.unwrap_or_else(|| self.data().indices());
         let distances = self.data().query_to_many(query, indices);
 
         let mut ind_dist: Vec<(usize, U)> = indices.iter().copied().zip(distances.into_iter()).collect();
@@ -343,8 +343,10 @@ impl<T: Number> Ord for RevNumber<T> {
 
 #[cfg(test)]
 mod tests {
+    use crate::cluster::PartitionCriteria;
     use crate::core::dataset::VecVec;
     use crate::distances;
+    use crate::utils::helpers;
 
     use super::*;
 
@@ -372,5 +374,27 @@ mod tests {
         assert!(results.contains(&1));
         assert!(!results.contains(&2));
         assert!(!results.contains(&3));
+    }
+
+    #[test]
+    fn test_knn_by_thresholds() {
+        let data_name = "knn_f32_euclidean".to_string();
+        let data: Vec<Vec<f32>> = helpers::gen_data_f32(2_000, 30, 0., 1., 42);
+        let data = VecVec::new(data, distances::f32::euclidean, data_name, false);
+
+        let query = &helpers::gen_data_f32(1, 30, 0., 1., 42)[0];
+        let criteria: PartitionCriteria<f32, _, VecVec<f32, _>> = PartitionCriteria::new(true).with_min_cardinality(1);
+
+        let cakes = CAKES::new(data, Some(42)).build(&criteria);
+
+        for k in [1, 10, 100] {
+            let thresholds_nn = cakes.knn_by_thresholds(&query.clone().as_slice(), k);
+            let actual_nn = cakes.linear_search_knn(&query.as_slice(), k, None);
+
+            //assert_eq!(thresholds_nn.len(), actual_nn.len());
+            println!("thresholds nn: {:?}", &thresholds_nn);
+            println!("actual nn: {:?}", &actual_nn);
+            assert_eq!(thresholds_nn, actual_nn);
+        }
     }
 }
