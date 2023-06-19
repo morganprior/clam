@@ -2,6 +2,7 @@ use std::collections::HashSet;
 
 use rayon::prelude::*;
 
+use abd_clam::cakes::CAKES;
 use abd_clam::dataset::Dataset;
 use abd_clam::number::Number;
 use abd_clam::search::cakes::CAKES;

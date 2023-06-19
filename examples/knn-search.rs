@@ -2,9 +2,9 @@ use std::time::Instant;
 
 use num_format::{Locale, ToFormattedString};
 
+use abd_clam::cakes::CAKES;
 use abd_clam::cluster::PartitionCriteria;
 use abd_clam::dataset::VecVec;
-use abd_clam::search::cakes::CAKES;
 
 pub mod utils;
 

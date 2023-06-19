@@ -10,7 +10,6 @@ pub struct KnnSieve<'a, T: Number, U: Number, D: Dataset<T, U>> {
     query: &'a [T],
     k: usize,
     grains: Vec<Grain<'a, T, U, D>>,
-    leaves: Vec<Grain<'a, T, U, D>>,
     is_refined: bool,
     hits: priority_queue::DoublePriorityQueue<usize, OrdNumber<U>>,
 }
@@ -22,7 +21,6 @@ impl<'a, T: Number, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, D> {
             query,
             k,
             grains: Vec::new(),
-            leaves: Vec::new(),
             is_refined: false,
             hits: Default::default(),
         }
@@ -50,7 +48,6 @@ impl<'a, T: Number, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, D> {
                     vec![g, g_max]
                 }
             })
-            .chain(self.leaves.drain(..))
             .collect::<Vec<_>>();
     }
 
@@ -125,7 +122,7 @@ impl<'a, T: Number, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, D> {
 
         // descend into straddlers
 
-        // If there are no straddlers all of the straddlers are leaves, then the grains in insiders and straddlers
+        // If there are no straddlers or all of the straddlers are leaves, then the grains in insiders and straddlers
         // are added to hits. If there are more than k hits, we repeatedly remove the furthest instance in hits until
         // there are either k hits left or more than k hits with some ties (distinct instances which are
         // the same distance from the query)
@@ -135,7 +132,6 @@ impl<'a, T: Number, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, D> {
             insiders.drain(..).chain(straddlers.drain(..)).for_each(|g| {
                 let new_hits =
                     g.c.indices(self.tree.data())
-                        // .par_iter()
                         .iter()
                         .map(|&i| (i, self.tree.data().query_to_one(self.query, i)))
                         .map(|(i, d)| (i, OrdNumber { number: d }))
@@ -159,7 +155,6 @@ impl<'a, T: Number, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, D> {
             let (leaves, non_leaves): (Vec<_>, Vec<_>) = self.grains.drain(..).partition(|g| g.c.is_leaf());
 
             let children = non_leaves
-                // .into_par_iter()
                 .into_iter()
                 .flat_map(|g| g.c.children())
                 .flatten()

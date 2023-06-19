@@ -215,11 +215,7 @@ impl<T: Number, U: Number, D: Dataset<T, U>> CAKES<T, U, D> {
 
     #[inline(never)]
     pub fn batch_knn_by_thresholds(&self, queries: &[&Vec<T>], k: usize) -> Vec<Vec<(usize, U)>> {
-        queries
-            // .par_iter()
-            .iter()
-            .map(|&q| self.knn_by_thresholds(q, k))
-            .collect()
+        queries.iter().map(|&q| self.knn_by_thresholds(q, k)).collect()
     }
 
     pub fn knn_by_thresholds(&self, query: &[T], k: usize) -> Vec<(usize, U)> {
@@ -262,7 +258,6 @@ impl<T: Number, U: Number, D: Dataset<T, U>> CAKES<T, U, D> {
         hits[..k].to_vec()
     }
 
-    // TODO: Add knn version
     #[inline(never)]
     pub fn batch_linear_search(&self, queries: &[&[T]], radius: U) -> Vec<Vec<(usize, U)>> {
         queries
@@ -272,7 +267,14 @@ impl<T: Number, U: Number, D: Dataset<T, U>> CAKES<T, U, D> {
             .collect()
     }
 
-    // TODO: Add knn version
+    #[inline(never)]
+    pub fn batch_linear_search_knn(&self, queries: &[&Vec<T>], k: usize) -> Vec<Vec<(usize, U)>> {
+        queries
+            .iter()
+            .map(|&query| self.linear_search_knn(query, k, None))
+            .collect()
+    }
+
     pub fn linear_search(&self, query: &[T], radius: U, indices: Option<&[usize]>) -> Vec<(usize, U)> {
         let indices = indices.unwrap_or_else(|| self.tree.root().indices(self.data()));
         let distances = self.data().query_to_many(query, indices);
@@ -282,6 +284,16 @@ impl<T: Number, U: Number, D: Dataset<T, U>> CAKES<T, U, D> {
             .zip(distances.into_iter())
             .filter(|(_, d)| *d <= radius)
             .collect()
+    }
+
+    pub fn linear_search_knn(&self, query: &[T], k: usize, indices: Option<&[usize]>) -> Vec<(usize, U)> {
+        let indices = indices.unwrap_or_else(|| self.tree.root().indices(self.data()));
+        let distances = self.data().query_to_many(query, indices);
+
+        let mut ind_dist: Vec<(usize, U)> = indices.iter().copied().zip(distances.into_iter()).collect();
+        ind_dist.sort_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap());
+
+        ind_dist[0..k].to_vec()
     }
 }
 
