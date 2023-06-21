@@ -1,8 +1,10 @@
+"""Plotting functions for the HDF5 example."""
 import pathlib
 import typing
 
-import reports
 from matplotlib import pyplot
+
+from . import reports
 
 
 def _violin(
@@ -17,9 +19,9 @@ def _violin(
 
 
 def _heat(
-    clusters_by_depth: list[list[reports.ClusterReport]],
-    ax: pyplot.Axes,
-):
+    clusters_by_depth: list[list[reports.ClusterReport]],  # noqa: ARG001
+    ax: pyplot.Axes,  # noqa: ARG001
+) -> pyplot.Axes:
     raise NotImplementedError
 
 
@@ -29,7 +31,8 @@ def plot_lfd_vs_depth(
     clusters_by_depth: list[list[reports.ClusterReport]],
     show: bool,
     output_dir: pathlib.Path,
-):
+) -> None:
+    """Plot the local fractal dimension vs depth."""
     figure: pyplot.Figure = pyplot.figure(figsize=(16, 10), dpi=300)
     title = ", ".join(
         [

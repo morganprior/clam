@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "abd-clam"
-version = "0.12.3-dev0"
+version = "0.13.0-dev0"
 description = "Clustered Learning of Approximate Manifolds"
 authors = [
     "Najib Ishaq <najib_ishaq@zoho.com>",
@@ -31,8 +31,11 @@ dtaidistance = "^2.3.10"
 pandas = "^2.0.2"
 datatable = [
     { version = "^1.0.0", platform = "linux" },
-    { git = "https://github.com/h2oai/datatable", rev = "cb07f6d3569b4646130dbc69041cc0fde95e40fa", platform = "darwin" }
+    { url = "https://github.com/h2oai/datatable/releases/download/v1.0.0/datatable-1.0.0-cp39-cp39-macosx_10_9_x86_64.whl", platform = "darwin" },
+    { url = "https://github.com/h2oai/datatable/releases/download/v1.0.0/datatable-1.0.0-cp39-cp39-win_amd64.whl", platform = "win32" }
 ]
+pydantic = "^1.10.9"
+matplotlib = "^3.7.1"
 
 [build-system]
 requires = ["poetry-core"]

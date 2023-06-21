@@ -1,36 +1,28 @@
+"""Example for running a CLAM classifier."""
+
 import logging
 import pathlib
 import time
 
-import csv_space
 import datatable
 import numpy
+from abd_clam import metric
+from abd_clam.classification import classifier
+from abd_clam.utils import synthetic_data
 from sklearn.metrics import accuracy_score
 from utils import paths
 
-from abd_clam import metric
-from abd_clam.classification import classifier
-from abd_clam.tests import synthetic_datasets
+from . import csv_space
 
-logging.basicConfig(
-    format="%(asctime)s - %(levelname)s - %(name)s - %(funcName)s - %(message)s",
-    datefmt="%d-%b-%y %H:%M:%S",
-)
-
-SYNTHETIC_DATA_DIR = paths.DATA_ROOT.joinpath("synthetic_data")
-SYNTHETIC_DATA_DIR.mkdir(exist_ok=True)
-
-BULLSEYE_TRAIN_PATH = SYNTHETIC_DATA_DIR.joinpath("bullseye_train.csv")
-BULLSEYE_TEST_PATH = SYNTHETIC_DATA_DIR.joinpath("bullseye_test.csv")
-FEATURE_COLUMNS = ["x", "y"]
-LABEL_COLUMN = "label"
+logger = logging.getLogger(__name__)
 
 
-def make_bullseye(path: pathlib.Path, n: int, force: bool = False):
+def make_bullseye(path: pathlib.Path, n: int, force: bool = False) -> None:
+    """Make a bullseye (multiple concentric rings) dataset."""
     if not force and path.exists():
         return
 
-    data, labels = synthetic_datasets.bullseye(n=n, num_rings=3, noise=0.10)
+    data, labels = synthetic_data.bullseye(n=n, num_rings=3, noise=0.10)
     x = data[:, 0].astype(numpy.float32)
     y = data[:, 1].astype(numpy.float32)
     labels = numpy.asarray(labels, dtype=numpy.int8)
@@ -38,11 +30,10 @@ def make_bullseye(path: pathlib.Path, n: int, force: bool = False):
     full = datatable.Frame({"x": x, "y": y, "label": labels})
     full.to_csv(str(path))
 
-    return
-
 
 # noinspection DuplicatedCode
-def main():
+def main() -> None:
+    """Run the example."""
     bullseye_train = csv_space.CsvDataset(
         BULLSEYE_TRAIN_PATH,
         "bullseye_train",
@@ -74,16 +65,16 @@ def main():
 
     score = accuracy_score(bullseye_test.labels, predicted_labels)
 
-    print("Building the classifier for:")
-    print(f"\t{bullseye_train.cardinality} instances and")
-    print(f"\t{bullseye_classifier.unique_labels} unique labels")
-    print(f"\ttook {build_time:.2e} seconds.")
+    logger.info("Building the classifier for:")
+    logger.info(f"\t{bullseye_train.cardinality} instances and")
+    logger.info(f"\t{bullseye_classifier.unique_labels} unique labels")
+    logger.info(f"\ttook {build_time:.2e} seconds.")
 
-    print("Predicting from the classifier for:")
-    print(f"\t{bullseye_test.cardinality} instances took")
-    print(f"\ttook {prediction_time:.2e} seconds.")
+    logger.info("Predicting from the classifier for:")
+    logger.info(f"\t{bullseye_test.cardinality} instances took")
+    logger.info(f"\ttook {prediction_time:.2e} seconds.")
 
-    print(f"The accuracy score was {score:.3f}")
+    logger.info(f"The accuracy score was {score:.3f}")
 
     # Desktop   non-cached, cached
     # build,    152,        154
@@ -97,6 +88,19 @@ def main():
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        format="%(asctime)s - %(levelname)s - %(name)s - %(funcName)s - %(message)s",
+        datefmt="%d-%b-%y %H:%M:%S",
+    )
+
+    SYNTHETIC_DATA_DIR = paths.DATA_ROOT.joinpath("synthetic_data")
+    SYNTHETIC_DATA_DIR.mkdir(exist_ok=True)
+
+    BULLSEYE_TRAIN_PATH = SYNTHETIC_DATA_DIR.joinpath("bullseye_train.csv")
+    BULLSEYE_TEST_PATH = SYNTHETIC_DATA_DIR.joinpath("bullseye_test.csv")
+    FEATURE_COLUMNS = ["x", "y"]
+    LABEL_COLUMN = "label"
+
     make_bullseye(BULLSEYE_TRAIN_PATH, n=1000, force=True)
     make_bullseye(BULLSEYE_TEST_PATH, n=200, force=True)
     main()

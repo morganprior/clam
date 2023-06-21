@@ -1,3 +1,5 @@
+"""CHAODA example."""
+
 from . import anomaly_data
 from . import download
 from . import inference

@@ -1,3 +1,5 @@
+"""Example of how to run CHAODA in its various modes with default settings."""
+
 import argparse
 import logging
 import os

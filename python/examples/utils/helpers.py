@@ -1,4 +1,7 @@
+"""Helper functions for the examples."""
+
 import functools
+import logging
 import time
 import typing
 
@@ -8,15 +11,18 @@ class TimeIt:
 
     def __init__(
         self,
-        logger,
+        logger: logging.Logger,
         template: str = "completed {:s} in {:.3f} seconds",
     ) -> None:
+        """Initialize the timer."""
         self.template: str = template
         self.logger = logger
 
-    def __call__(self, function: typing.Callable):
+    def __call__(self, function: typing.Callable):  # noqa: ANN204
+        """Time the execution of a function."""
+
         @functools.wraps(function)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args, **kwargs):  # noqa: ANN002,ANN003,ANN202
             start = time.perf_counter()
             result = function(*args, **kwargs)
             end = time.perf_counter()

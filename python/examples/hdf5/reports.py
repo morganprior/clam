@@ -1,3 +1,5 @@
+"""Reports for the HDF5 examples."""
+
 import pathlib
 import typing
 
@@ -7,6 +9,8 @@ from matplotlib import pyplot
 
 
 class TreeReport(pydantic.BaseModel):
+    """Report for a single tree."""
+
     data_name: str
     metric_name: str
     cardinality: int
@@ -17,6 +21,8 @@ class TreeReport(pydantic.BaseModel):
 
 
 class ClusterReport(pydantic.BaseModel):
+    """Report for a single cluster."""
+
     cardinality: int
     indices: typing.Union[list[int], None]
     name: str
@@ -26,10 +32,10 @@ class ClusterReport(pydantic.BaseModel):
     lfd: float
     left_child: typing.Union[str, None]
     right_child: typing.Union[str, None]
-    # ratios: list[float]
 
 
 def load_tree(base_path: pathlib.Path) -> list[ClusterReport]:
+    """Load a tree report."""
     return [
         ClusterReport.parse_file(path)
         for path in base_path.iterdir()
@@ -38,6 +44,8 @@ def load_tree(base_path: pathlib.Path) -> list[ClusterReport]:
 
 
 class RnnReport(pydantic.BaseModel):
+    """Report for ranged nearest neighbors search."""
+
     data_name: str
     metric_name: str
     num_queries: int
@@ -54,58 +62,70 @@ class RnnReport(pydantic.BaseModel):
 
     # noinspection PyMethodParameters
     @pydantic.validator("search_radii", pre=True)
-    def parse_search_radii(search_radii):
+    def parse_search_radii(search_radii) -> numpy.ndarray:  # noqa: N805
+        """Parse the search radii."""
         return numpy.array(search_radii, dtype=numpy.float64)
 
     # noinspection PyMethodParameters
     @pydantic.validator("search_times", pre=True)
-    def parse_search_times(search_times):
+    def parse_search_times(search_times) -> numpy.ndarray:  # noqa: N805
+        """Parse the search times."""
         return numpy.array(search_times, dtype=numpy.float64)
 
     # noinspection PyMethodParameters
     @pydantic.validator("recalls", pre=True)
-    def parse_recalls(recalls):
+    def parse_recalls(recalls) -> numpy.ndarray:  # noqa: N805
+        """Parse the recalls."""
         return numpy.array(recalls, dtype=numpy.float64)
 
     class Config:
+        """Pydantic configuration."""
+
         arbitrary_types_allowed = True
 
-    def is_valid(self):
+    def is_valid(self) -> list[str]:
+        """Return whether the report is valid."""
         reasons: list[str] = []
 
         if self.num_queries != len(self.search_radii):
             reasons.append(
-                f"self.num_queries != len(self.search_radii): {self.num_queries} != {len(self.search_radii)}",
+                f"self.num_queries != len(self.search_radii): "
+                f"{self.num_queries} != {len(self.search_radii)}",
             )
 
         if self.num_queries != len(self.search_times):
             reasons.append(
-                f"self.num_queries != len(self.search_times): {self.num_queries} != {len(self.search_times)}",
+                f"self.num_queries != len(self.search_times): "
+                f"{self.num_queries} != {len(self.search_times)}",
             )
 
         if self.num_queries != len(self.outputs):
             reasons.append(
-                f"self.num_queries != len(self.outputs): {self.num_queries} != {len(self.outputs)}",
+                f"self.num_queries != len(self.outputs): "
+                f"{self.num_queries} != {len(self.outputs)}",
             )
 
         if self.num_queries != len(self.recalls):
             reasons.append(
-                f"self.num_queries != len(self.recalls): {self.num_queries} != {len(self.recalls)}",
+                f"self.num_queries != len(self.recalls): "
+                f"{self.num_queries} != {len(self.recalls)}",
             )
 
         for i, samples in enumerate(self.search_times, start=1):
             if self.num_runs != len(samples):
                 reasons.append(
-                    f"{i}/{self.num_queries}: self.num_runs != samples.len(): {self.num_runs} != {len(samples)}",
+                    f"{i}/{self.num_queries}: self.num_runs != samples.len(): "
+                    f"{self.num_runs} != {len(samples)}",
                 )
 
         return reasons
 
     @property
     def output_sizes(self) -> numpy.ndarray:
+        """Return the number of outputs for each query."""
         return numpy.asarray(list(map(len, self.outputs)))
 
-    def _plot_xy(self, ax: pyplot.Axes, x: numpy.ndarray, y: numpy.ndarray):
+    def _plot_xy(self, ax: pyplot.Axes, x: numpy.ndarray, y: numpy.ndarray) -> None:
         ax.scatter(x, y, s=0.2)
 
     def _plot_search_radii_vs_search_times(self, ax: pyplot.Axes) -> pyplot.Axes:
@@ -144,11 +164,12 @@ class RnnReport(pydantic.BaseModel):
         self,
         show: bool,
         output_dir: pathlib.Path,
-    ):
+    ) -> None:
+        """Plot the report."""
         figure, ((ax00, ax01), (ax10, ax11)) = pyplot.subplots(2, 2, figsize=(8.5, 11))
-        # figure.suptitle(f'Ranged Nearest Neighbors Search')
         figure.suptitle(
-            f"{self.data_name}, {self.metric_name}, ({self.cardinality}, {self.dimensionality})",
+            f"{self.data_name}, {self.metric_name}, "
+            f"({self.cardinality}, {self.dimensionality})",
         )
 
         self._plot_search_radii_vs_search_times(ax00)

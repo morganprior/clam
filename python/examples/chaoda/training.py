@@ -1,3 +1,5 @@
+"""Training script for Chaoda anomaly detection model."""
+
 import math
 import pathlib
 
@@ -9,7 +11,8 @@ from abd_clam.core import cluster_criteria
 from . import anomaly_data
 
 
-def default_training(data_dir: pathlib.Path, output_dir: pathlib.Path):
+def default_training(data_dir: pathlib.Path, output_dir: pathlib.Path) -> pathlib.Path:
+    """Train the model using the default settings."""
     raw_datasets = [
         anomaly_data.AnomalyData.load(data_dir, name)
         for name in anomaly_data.TRAINING_SET
@@ -38,7 +41,7 @@ def default_training(data_dir: pathlib.Path, output_dir: pathlib.Path):
         for s in spaces
     ]
 
-    models_kwargs = [
+    models_kwargs = [  # type: ignore[var-annotated]
         (anomaly_detection.meta_ml.MetaDT, {}),
         (anomaly_detection.meta_ml.MetaLR, {}),
     ]
@@ -52,14 +55,12 @@ def default_training(data_dir: pathlib.Path, output_dir: pathlib.Path):
         graph_scorers.StationaryProbabilities(steps=16),
     ]
 
-    final_path = anomaly_detection.training.train_meta_ml(
+    return anomaly_detection.training.train_meta_ml(
         spaces_criteria=spaces_criteria,
-        models_kwargs=models_kwargs,
+        models_kwargs=models_kwargs,  # type: ignore[arg-type]
         scorers=scorers,
         out_dir=output_dir,
         num_epochs=10,
         save_frequency=1,
         only_train_fast_scorers=True,
     )
-
-    return final_path

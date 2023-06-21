@@ -1,3 +1,5 @@
+"""A module for downloading and storing anomaly detection data."""
+
 import json
 import pathlib
 import subprocess
@@ -6,7 +8,6 @@ import typing
 import h5py
 import numpy
 import scipy.io
-
 from abd_clam.core import dataset
 from abd_clam.utils import helpers
 
@@ -58,6 +59,8 @@ MMapMode = typing.Literal["r", None]
 
 
 class AnomalyData:
+    """A class for storing anomaly detection data."""
+
     __slots__ = [
         "data_dir",
         "name",
@@ -70,7 +73,7 @@ class AnomalyData:
         "scores_path",
     ]
 
-    def __init__(
+    def __init__(  # noqa PLR0913
         self,
         data_dir: pathlib.Path,
         name: str,
@@ -78,6 +81,7 @@ class AnomalyData:
         mmap_threshold: int = 1024**3,
         mmap_mode: MMapMode = None,
     ) -> None:
+        """Initialize an `AnomalyData` object."""
         self.data_dir = data_dir
         self.name = name
         self.url = url
@@ -100,29 +104,30 @@ class AnomalyData:
 
     @property
     def features(self) -> numpy.ndarray:
+        """Return the features for the dataset."""
         if not self.features_path.exists():
             msg = f"Dataset {self.name} as not yet been downloaded."
             raise ValueError(msg)
-        else:
-            return numpy.load(str(self.features_path), self.mmap_mode)
+        return numpy.load(str(self.features_path), self.mmap_mode)
 
     @property
     def normalized_features(self) -> numpy.ndarray:
+        """Return the normalized features for the dataset."""
         if not self.normalized_features_path.exists():
             msg = f"Dataset {self.name} as not yet been downloaded."
             raise ValueError(msg)
-        else:
-            return numpy.load(str(self.normalized_features_path), self.mmap_mode)
+        return numpy.load(str(self.normalized_features_path), self.mmap_mode)
 
     @property
-    def scores(self):
+    def scores(self) -> numpy.ndarray:
+        """Return the anomaly scores for the dataset."""
         if not self.features_path.exists():
             msg = f"Dataset {self.name} as not yet been downloaded."
             raise ValueError(msg)
-        else:
-            return numpy.load(str(self.scores_path))
+        return numpy.load(str(self.scores_path))
 
     def save(self) -> pathlib.Path:
+        """Save the data to disk."""
         save_path = self.data_dir.joinpath("classes").joinpath(f"{self.name}.json")
         save_path.parent.mkdir(exist_ok=True)
         attributes: dict[str, typing.Any] = {
@@ -141,14 +146,15 @@ class AnomalyData:
                 relative_path = v.relative_to(self.data_dir)
                 attributes[k] = str(relative_path)
 
-        with open(save_path, "w") as writer:
+        with save_path.open("w") as writer:
             json.dump(attributes, writer, indent=4)
         return save_path
 
     @staticmethod
     def load(data_dir: pathlib.Path, name: str) -> "AnomalyData":
+        """Load the data from disk."""
         save_path = data_dir.joinpath("classes").joinpath(f"{name}.json")
-        with open(save_path) as reader:
+        with save_path.open("r") as reader:
             attributes = json.load(reader)
 
         data = AnomalyData(
@@ -172,6 +178,7 @@ class AnomalyData:
         suppress_stdout: bool = True,
         suppress_stderr: bool = True,
     ) -> "AnomalyData":
+        """Download the data."""
         self.raw_path = self.raw_path.with_name(f"{self.name}.{extension}")
 
         if not force and self.raw_path.exists():
@@ -184,13 +191,15 @@ class AnomalyData:
             kwargs["stdout"] = subprocess.DEVNULL
         if suppress_stderr:
             kwargs["stderr"] = subprocess.DEVNULL
-        subprocess.run(["wget", self.url, "-O", self.raw_path], **kwargs)
+        subprocess.run(  # type: ignore[call-overload]
+            ["wget", self.url, "-O", self.raw_path],  # noqa: S603, S607
+            **kwargs,
+        )
 
         # TODO: I would rather not use a `subprocess` command to download the
         #  data. However, I have tried using the `wget` package, `requests`,
         #  `urllib` and others. Each of those somehow corrupts the `.mat` file
         #  and renders it unable to be read by `scipy.io.loadmat` or`h5py.File`.
-        # wget.download(self.url, out=str(self.raw_path))
 
         size = self.raw_path.stat().st_size
         if size < 1024:
@@ -207,6 +216,7 @@ class AnomalyData:
         self,
         normalization_mode: helpers.NormalizationMode = "gaussian",
     ) -> "AnomalyData":
+        """Preprocess the data."""
         data_dict = {}
         if self.name in HDF5_FILE_URLS:
             with h5py.File(self.raw_path, "r") as reader:
@@ -237,6 +247,7 @@ class AnomalyData:
         return self
 
     def as_tabular_dataset(self, normalized: bool = True) -> dataset.TabularDataset:
+        """Return the dataset as a `TabularDataset`."""
         return dataset.TabularDataset(
             data=self.normalized_features if normalized else self.features,
             name=self.name,

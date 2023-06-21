@@ -1,6 +1,12 @@
-import paths
-import plots
-import reports
+"""Example of how to run the hdf5 example."""
+
+import logging
+
+from . import paths
+from . import plots
+from . import reports
+
+logger = logging.getLogger(__name__)
 
 data_name = "glove-25"
 
@@ -18,7 +24,7 @@ for path in trees_path.iterdir():
     if data_name not in path.name:
         continue
 
-    print(f"reading from {path.name} ...")
+    logger.info(f"reading from {path.name} ...")
     tree: reports.TreeReport = reports.TreeReport.parse_file(path.joinpath("tree.json"))
     clusters = reports.load_tree(path)
     clusters_by_depth = [
