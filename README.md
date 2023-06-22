@@ -1,4 +1,4 @@
-# CLAM: Clustered Learning of Approximate Manifolds (v0.12.0)
+# CLAM: Clustered Learning of Approximate Manifolds (v0.12.3-dev0)
 
 CLAM is a Rust/Python library for learning approximate manifolds from data.
 It is designed to be fast, memory-efficient, easy to use, and scalable for big data applications.
@@ -13,7 +13,7 @@ This means that the API is not yet stable and breaking changes may occur frequen
 CLAM is a library crate so you can add it to your crate using:
 
 ```shell
-> cargo add abd_clam@0.12.0
+> cargo add abd_clam@0.12.3-dev0
 ```
 
 Here is a simple example of how to use CLAM to perform nearest neighbors search:
@@ -40,18 +40,24 @@ fn search() {
 
     let dataset = VecVec::new(data, euclidean, "demo".to_string(), false);
     let criteria = PartitionCriteria::new(true).with_min_cardinality(1);
-    let cakes = CAKES::new(dataset, Some(seed)).build(&criteria);
-    // The CAKES struct provides the functionality described in our [CHESS paper](https://arxiv.org/abs/1908.08551).
+    let model = CAKES::new(dataset, Some(seed)).build(&criteria);
+    // The CAKES struct provides the functionality described in our
+    // [CHESS paper](https://arxiv.org/abs/1908.08551).
 
     let (query, radius, k) = (&queries[0], 0.05, 10);
 
-    let rnn_results: Vec<(usize, f32)> = cakes.rnn_search(query, radius);
-    // This is how we perform ranged nearest neighbors search with radius 0.05 around the query.
+    let rnn_results: Vec<(usize, f32)> = model.rnn_search(query, radius);
+    // This is how we perform ranged nearest neighbors search with radius 0.05
+    // around the query.
 
     let knn_results: Vec<(usize, f32)> = model.knn_search(query, 10);
-    // This is how we perform k-nearest neighbors search for the 10 nearest neighbors of query.
+    // This is how we perform k-nearest neighbors search for the 10 nearest
+    // neighbors of query.
 
-    // Both results are a Vec of 2-tuples where each tuple is the index and distance to points in the data.
+    // Both results are a Vec of 2-tuples where each tuple is the index and
+    // distance to points in the data.
+
+    todo!()
 }
 ```
 
