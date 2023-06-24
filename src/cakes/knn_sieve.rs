@@ -210,6 +210,9 @@ impl<'a, T: Number, U: Number, D: Dataset<T, U>> Grain<'a, T, U, D> {
         !(self.is_inside(threshold) || self.is_outside(threshold))
     }
 
+    /// TODO: is inside and is outside need to be fixed to reflect the fact that grain distance has built in plus
+    /// radial distance
+
     /// A Grain is "inside" the threshold if the furthest, worst-case possible point is at most as far as
     /// threshold distance from the query, i.e., if d_max is greater than or equal to the threshold distance
     fn is_inside(&self, threshold: U) -> bool {
