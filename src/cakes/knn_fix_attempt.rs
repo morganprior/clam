@@ -12,7 +12,6 @@ pub struct KnnSieve<'a, T: Number, U: Number, D: Dataset<T, U>> {
     grains: Vec<Grain<'a, T, U, D>>,
     is_refined: bool,
     hits: priority_queue::DoublePriorityQueue<usize, OrdNumber<U>>,
-    hits_hash: std::collections::HashSet<usize>,
 }
 
 impl<'a, T: Number, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, D> {
@@ -24,7 +23,6 @@ impl<'a, T: Number, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, D> {
             grains: Vec::new(),
             is_refined: false,
             hits: Default::default(),
-            hits_hash: Default::default(),
         }
     }
 
@@ -51,28 +49,52 @@ impl<'a, T: Number, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, D> {
                 }
             })
             .collect::<Vec<_>>();
-
-        for gr in &self.grains {
-            println!("gr d: {}, c: {}", gr.d, gr.multiplicity);
-        }
     }
 
     pub fn is_refined(&self) -> bool {
         self.is_refined
     }
 
-    pub fn refine_step(&mut self, _step: usize) {
+    pub fn refine_step(&mut self, step: usize) {
+        // let centers = self.layer.iter().map(|c| c.arg_center()).collect::<Vec<_>>();
+        // let distances = self.dataset.query_to_many(self.query, &centers);
+
+        // let mut grains = self
+        //     .layer
+        //     .drain(..)
+        //     .zip(distances.iter())
+        //     .flat_map(|(c, &d)| {
+        //         if c.is_singleton() {
+        //             // If the radius is 0, we take every instance in the cluster or no instance in the cluster.
+        //             vec![Grain::new(c, d, c.cardinality())]
+        //         } else {
+        //             // If radius is non-zero, we may only take a subset of the cluster.
+        //             // We are guarunteed one point (the center) a distance d from the query.
+        //             // We are guarunteed cardinality-1 other points a distance of d+radius from the query,
+        //             // as this reflects the "worst case scenario" for an instance's position within the cluster.
+        //             let g = Grain::new(c, d, 1);
+        //             let g_max = Grain::new(c, d + c.radius(), c.cardinality() - 1);
+        //             vec![g, g_max]
+        //         }
+        //     })
+        //     .chain(self.leaves.drain(..))
+        //     .collect::<Vec<_>>();
+
+        //do we also need to chain hits here before partitioning??
+
         let i = Grain::partition_kth(&mut self.grains, self.k);
         let threshold = self.grains[i].d;
 
-        // let num_guaranteed = self.grains[..=i].iter().map(|g| g.multiplicity).sum::<usize>();
-        // assert!(num_guaranteed >= self.k,
-        //     "Too few guarantees {} vs {}, index: {}, threshold: {}",
-        //     num_guaranteed,
-        //     self.k,
-        //     i,
-        //     threshold,
-        // );
+        println!("Threshokd is : {}", threshold);
+        let num_guaranteed = self.grains[..=i].iter().map(|g| g.multiplicity).sum::<usize>();
+        assert!(
+            num_guaranteed >= self.k,
+            "Too few guarantees {} vs {}, index: {}, threshold: {}",
+            num_guaranteed,
+            self.k,
+            i,
+            threshold,
+        );
 
         // Filters grains by being outside the threshold.
         // Ties are added to hits together; we will never remove too many instances here
@@ -96,34 +118,50 @@ impl<'a, T: Number, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, D> {
             println!("card is {}", ins.multiplicity);
         }
 
+        println!(
+            "Step {}: Got {} insiders and {} straddlers, with {} in hits ...",
+            step,
+            insiders.len(),
+            straddlers.len(),
+            self.hits.len(),
+        );
+
         // distinguish between those        println!("insiders are: {:?}", returable_insiders);
         // insiders we won't partition further and those we will
         // add instances from insiders we won't further partition to hits
         let (small_insiders, big_insiders): (Vec<_>, Vec<_>) = insiders
             .drain(..)
             .partition(|g| (g.c.cardinality() <= self.k) || g.c.is_leaf());
-
+        println!(
+            "{} small insiders and {} big insiders",
+            small_insiders.len(),
+            big_insiders.len()
+        );
+        // for ins in &small_insiders {
+        //     println!("distance is {}", ins.d);
+        // }
         insiders = big_insiders;
         small_insiders.into_iter().for_each(|g| {
             // println!("leaf or nah : {}", g.c.is_leaf());
             // println!("indices are : {:?}",  self.tree.indices_of(g.c));
             // println!("distance for this grain is {}", g.d);
-            let mut new_hits = std::collections::HashSet::new();
-            self.tree.indices_of(g.c).iter().for_each(|index| {
-                new_hits.insert(index);
-            });
-
-            let new_hits = new_hits
+            let new_hits = self
+                .tree
+                .indices_of(g.c)
                 .iter()
-                .map(|&i| (i, self.tree.data().query_to_one(self.query, *i)))
-                .map(|(&i, d)| (i, OrdNumber { number: d }));
+                .map(|i| (i, self.tree.data().query_to_one(self.query, *i)))
+                .map(|(i, d)| (*i, OrdNumber { number: d }));
 
-            self.hits.extend(new_hits.clone());
-            new_hits.into_iter().for_each(|(i, _)| {
-                self.hits_hash.insert(i);
-            });
+            self.hits.extend(new_hits);
         });
 
+        println!(
+            "Step {}: Got {} insiders and {} straddlers, with {} in hits ...",
+            step,
+            insiders.len(),
+            straddlers.len(),
+            self.hits.len(),
+        );
         // descend into straddlers
 
         // If there are no straddlers or all of the straddlers are leaves, then the grains in insiders and straddlers
@@ -134,20 +172,14 @@ impl<'a, T: Number, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, D> {
         // If straddlers is not empty nor all leaves, partition non-leaves into children
         if straddlers.is_empty() || straddlers.iter().all(|g| g.c.is_leaf()) {
             insiders.drain(..).chain(straddlers.drain(..)).for_each(|g| {
-                let mut new_hits = std::collections::HashSet::new();
-                self.tree.indices_of(g.c).iter().for_each(|index| {
-                    new_hits.insert(index);
-                });
-
-                let new_hits = new_hits
+                let new_hits = self
+                    .tree
+                    .indices_of(g.c)
                     .iter()
-                    .map(|&i| (i, self.tree.data().query_to_one(self.query, *i)))
-                    .map(|(&i, d)| (i, OrdNumber { number: d }));
+                    .map(|&i| (i, self.tree.data().query_to_one(self.query, i)))
+                    .map(|(i, d)| (i, OrdNumber { number: d }));
 
-                self.hits.extend(new_hits.clone());
-                new_hits.into_iter().for_each(|(i, _)| {
-                    self.hits_hash.insert(i);
-                });
+                self.hits.extend(new_hits);
             });
             println!("at this point hits is : {}", self.hits.len(),);
             if self.hits.len() > self.k {
@@ -162,13 +194,18 @@ impl<'a, T: Number, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, D> {
                 self.hits.extend(potential_ties.drain(..));
             }
             self.is_refined = true;
+            println!("Step {}: Sieve is refined! ...", step);
         } else {
             self.grains = insiders.drain(..).chain(straddlers.drain(..)).collect();
             let (leaves, non_leaves): (Vec<_>, Vec<_>) = self.grains.drain(..).partition(|g| g.c.is_leaf());
+            println!(
+                "Step {}: Of the straddlers, got {} leaves and {} non-leaves ...",
+                step,
+                leaves.len(),
+                non_leaves.len()
+            );
 
-            let (_, clusters): (Vec<_>, Vec<_>) = non_leaves.into_iter().partition(|g| g.multiplicity == 1);
-
-            let children = clusters
+            let children = non_leaves
                 .into_iter()
                 .flat_map(|g| g.c.children().unwrap())
                 .map(|c| (c, self.tree.data().query_to_one(self.query, c.arg_center())))
@@ -179,6 +216,7 @@ impl<'a, T: Number, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, D> {
                 });
 
             self.grains = leaves.into_iter().chain(children).collect();
+            self.initialize_grains();
         }
     }
 

@@ -87,4 +87,8 @@ impl<T: Number, U: Number, D: Dataset<T, U>> Tree<T, U, D> {
         self.root.dfr(&self.data, 0);
         self
     }
+
+    pub(crate) fn indices_of<'a>(&'a self, c: &'a Cluster<T, U, D>) -> &'a [usize] {
+        c.indices(&self.data)
+    }
 }
