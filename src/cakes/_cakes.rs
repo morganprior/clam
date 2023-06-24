@@ -348,7 +348,7 @@ mod tests {
     use crate::cluster::PartitionCriteria;
     use crate::core::dataset::VecVec;
     use crate::distances;
-    use crate::utils::helpers;
+    use crate::utils::synthetic_data;
 
     use super::*;
 
@@ -382,22 +382,24 @@ mod tests {
     #[ignore = "knn sieve still in progress"]
     fn test_knn_by_thresholds() {
         let data_name = "knn_f32_euclidean".to_string();
-        let data: Vec<Vec<f32>> = helpers::gen_data_f32(5000, 30, 0., 10., 42);
+        let data: Vec<Vec<f32>> = synthetic_data::random_f32(5000, 30, 0., 10., 42);
         let data = VecVec::new(data, distances::f32::euclidean, data_name, false);
 
-        let query = &helpers::gen_data_f32(1, 30, 0., 1., 44)[0];
+        let query = &synthetic_data::random_f32(1, 30, 0., 1., 44)[0];
         let criteria: PartitionCriteria<f32, _, VecVec<f32, _>> = PartitionCriteria::new(true).with_min_cardinality(1);
 
         let cakes = CAKES::new(data, Some(42)).build(&criteria);
 
+        #[allow(clippy::single_element_loop)]
         for k in [3] {
-            let thresholds_nn = cakes.knn_by_thresholds(&query.clone().as_slice(), k);
-            let actual_nn = cakes.linear_search_knn(&query.as_slice(), k, None);
+            let thresholds_nn = cakes.knn_by_thresholds(query, k);
+            let actual_nn = cakes.linear_search_knn(query, k, None);
 
-            //assert_eq!(thresholds_nn.len(), actual_nn.len());
             println!("thresholds nn: {:?}", &thresholds_nn);
             println!("actual nn: {:?}", &actual_nn);
             assert_eq!(thresholds_nn, actual_nn);
+
+            assert_eq!(thresholds_nn.len(), actual_nn.len());
         }
     }
 }

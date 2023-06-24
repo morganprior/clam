@@ -4,7 +4,6 @@ use abd_clam::cakes::CAKES;
 use abd_clam::cluster::PartitionCriteria;
 use abd_clam::dataset::VecVec;
 use abd_clam::distances::f32::METRICS;
-use abd_clam::search::cakes::CAKES;
 use abd_clam::utils::synthetic_data;
 
 fn cakes(c: &mut Criterion) {
@@ -25,13 +24,9 @@ fn cakes(c: &mut Criterion) {
         let queries = synthetic_data::random_f32(num_queries, 10, 0., 1., seed);
         let queries = queries.iter().collect::<Vec<_>>();
 
-        let dataset = VecVec::new(data, metric, "100k-10".to_string(), false);
+        let data = VecVec::new(data, metric, "100k-10".to_string(), false);
         let criteria = PartitionCriteria::new(true).with_min_cardinality(1);
-
-        let data = VecVec::new(data, metric, "CAKES-Bench".to_string(), false);
         let cakes = CAKES::new(data, Some(42)).build(&criteria);
-
-        let queries = (0..num_queries).map(|i| &queries[i]).collect::<Vec<_>>();
 
         for k in [1, 10, 100] {
             let id = BenchmarkId::new("1M-100", k);

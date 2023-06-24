@@ -4,7 +4,6 @@ use abd_clam::cakes::CAKES;
 use abd_clam::cluster::PartitionCriteria;
 use abd_clam::dataset::VecVec;
 use abd_clam::distances::f32::METRICS;
-use abd_clam::search::cakes::CAKES;
 use abd_clam::utils::synthetic_data;
 
 fn cakes(c: &mut Criterion) {
