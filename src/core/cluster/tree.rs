@@ -69,4 +69,8 @@ impl<T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> Tree<T, U, D> {
     pub fn indices(&self) -> &[usize] {
         self.data.indices()
     }
+
+    pub(crate) fn indices_of<'a>(&'a self, c: &'a Cluster<T, U>) -> &[usize] {
+        c.indices(&self.data)
+    }
 }

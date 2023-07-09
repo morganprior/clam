@@ -3,11 +3,12 @@ use core::f64::EPSILON;
 use distances::Number;
 use rayon::prelude::*;
 
-use crate::{
-    cluster::{Cluster, PartitionCriteria, Tree},
-    dataset::Dataset,
-    utils::helpers,
-};
+use crate::cluster::PartitionCriteria;
+use crate::cluster::{Cluster, Tree};
+use crate::dataset::Dataset;
+use crate::utils::helpers;
+
+use super::knn_sieve::KnnSieve;
 
 #[derive(Debug)]
 pub struct CAKES<T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> {
@@ -152,7 +153,6 @@ impl<T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> CAKES<T, U, D> {
         hits.into_iter().map(|(i, OrdNumber(d))| (i, d)).collect()
     }
 
-    #[inline(always)]
     fn d_min(&self, c: &Cluster<T, U>, d: U) -> U {
         if d < c.radius {
             U::zero()
@@ -161,7 +161,7 @@ impl<T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> CAKES<T, U, D> {
         }
     }
 
-    // pop from the top of `candidates` until the top candiadte is a leaf cluster.
+    // pop from the top of `candidates` until the top candidate is a leaf cluster.
     fn pop_till_leaf(&self, query: T, candidates: &mut priority_queue::PriorityQueue<&Cluster<T, U>, RevNumber<U>>) {
         while !candidates.peek().unwrap().0.is_leaf() {
             let [l, r] = candidates.pop().unwrap().0.children().unwrap();
@@ -208,20 +208,28 @@ impl<T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> CAKES<T, U, D> {
         }
     }
 
-    // pub fn knn_search(&self, query: &T, k: usize) -> Vec<(usize, U)> {
-    //     let mut sieve = KnnSieve::new(&self.root, query, k);
-    //     while !sieve.is_refined() {
-    //         sieve.refine_step();
-    //     }
-    //     sieve.extract()
-    // }
+    #[inline(never)]
+    pub fn batch_knn_by_thresholds(&self, queries: &[T], k: usize) -> Vec<Vec<(usize, U)>> {
+        queries.iter().map(|&q| self.knn_by_thresholds(q, k)).collect()
+    }
+
+    pub fn knn_by_thresholds(&self, query: T, k: usize) -> Vec<(usize, U)> {
+        let mut sieve = KnnSieve::new(&self.tree, query, k);
+        sieve.initialize_grains();
+        let mut step = 1;
+        while !sieve.is_refined() {
+            sieve.refine_step(step);
+            step += 1;
+        }
+        sieve.extract()
+    }
 
     #[inline(never)]
     pub fn batch_knn_by_rnn(&self, queries: &[T], k: usize) -> Vec<Vec<(usize, U)>> {
         queries
             // .par_iter()
             .iter()
-            .map(|&query| self.knn_by_rnn(query, k))
+            .map(|&q| self.knn_by_rnn(q, k))
             .collect()
     }
 
@@ -243,11 +251,10 @@ impl<T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> CAKES<T, U, D> {
             hits = self.rnn_search(query, U::from(radius));
         }
 
-        hits.sort_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap());
+        hits.sort_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(core::cmp::Ordering::Less));
         hits[..k].to_vec()
     }
 
-    // TODO: Add knn version
     #[inline(never)]
     pub fn batch_linear_search(&self, queries: &[T], radius: U) -> Vec<Vec<(usize, U)>> {
         queries
@@ -257,9 +264,16 @@ impl<T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> CAKES<T, U, D> {
             .collect()
     }
 
-    // TODO: Add knn version
+    #[inline(never)]
+    pub fn batch_linear_search_knn(&self, queries: &[T], k: usize) -> Vec<Vec<(usize, U)>> {
+        queries
+            .iter()
+            .map(|&query| self.linear_search_knn(query, k, None))
+            .collect()
+    }
+
     pub fn linear_search(&self, query: T, radius: U, indices: Option<&[usize]>) -> Vec<(usize, U)> {
-        let indices = indices.unwrap_or_else(|| self.tree.root().indices(self.data()));
+        let indices = indices.unwrap_or_else(|| self.data().indices());
         let distances = self.data().query_to_many(query, indices);
         indices
             .iter()
@@ -267,6 +281,16 @@ impl<T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> CAKES<T, U, D> {
             .zip(distances.into_iter())
             .filter(|(_, d)| *d <= radius)
             .collect()
+    }
+
+    pub fn linear_search_knn(&self, query: T, k: usize, indices: Option<&[usize]>) -> Vec<(usize, U)> {
+        let indices = indices.unwrap_or_else(|| self.data().indices());
+        let distances = self.data().query_to_many(query, indices);
+
+        let mut ind_dist: Vec<(usize, U)> = indices.iter().copied().zip(distances.into_iter()).collect();
+        ind_dist.sort_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap());
+
+        ind_dist[0..k].to_vec()
     }
 }
 
@@ -318,8 +342,10 @@ impl<T: Number> Ord for RevNumber<T> {
 mod tests {
     use std::collections::HashSet;
 
-    use crate::core::dataset::VecVec;
     use distances::vectors::euclidean;
+    use symagen::random_data;
+
+    use crate::dataset::VecVec;
 
     use super::*;
 
@@ -328,7 +354,7 @@ mod tests {
         let data: Vec<&[f32]> = vec![&[0., 0.], &[1., 1.], &[2., 2.], &[3., 3.]];
 
         let name = "test".to_string();
-        let dataset = VecVec::new(data, euclidean, name, false);
+        let dataset = VecVec::new(data, euclidean::<_, f32>, name, false);
         let criteria = PartitionCriteria::new(true);
         let cakes = CAKES::new(dataset, None).build(criteria);
 
@@ -351,7 +377,7 @@ mod tests {
     fn rnn_search() {
         let data = (-100..=100).map(|x| vec![x as f32]).collect::<Vec<_>>();
         let data = data.iter().map(|x| x.as_slice()).collect::<Vec<_>>();
-        let data = VecVec::new(data, euclidean, "test".to_string(), false);
+        let data = VecVec::new(data, euclidean::<_, f32>, "test".to_string(), false);
         let criteria = PartitionCriteria::new(true);
         let cakes = CAKES::new(data, Some(42)).build(criteria);
 
@@ -393,6 +419,32 @@ mod tests {
                     diff
                 );
             }
+        }
+    }
+
+    #[test]
+    #[ignore = "knn sieve still in progress"]
+    fn test_knn_by_thresholds() {
+        let data_name = "knn_f32_euclidean".to_string();
+        let data = random_data::random_f32(5000, 30, 0., 10., 42);
+        let data = data.iter().map(|v| v.as_slice()).collect::<Vec<_>>();
+        let data = VecVec::new(data, euclidean::<_, f32>, data_name, false);
+
+        let query = &random_data::random_f32(1, 30, 0., 1., 44)[0];
+        let criteria = PartitionCriteria::new(true).with_min_cardinality(1);
+
+        let cakes = CAKES::new(data, Some(42)).build(criteria);
+
+        #[allow(clippy::single_element_loop)]
+        for k in [3] {
+            let thresholds_nn = cakes.knn_by_thresholds(query, k);
+            let actual_nn = cakes.linear_search_knn(query, k, None);
+
+            println!("thresholds nn: {:?}", &thresholds_nn);
+            println!("actual nn: {:?}", &actual_nn);
+            assert_eq!(thresholds_nn, actual_nn);
+
+            assert_eq!(thresholds_nn.len(), actual_nn.len());
         }
     }
 }
