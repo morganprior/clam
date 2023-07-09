@@ -51,7 +51,6 @@ impl<'a, T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, 
     pub fn refine_step(&mut self, _step: usize) {
         let i = Grain::partition_kth(&mut self.grains, self.k);
         let threshold = self.grains[i].d;
-        println!("Threshold is : {}", threshold);
 
         // Filters grains by being outside the threshold.
         // Ties are added to hits together; we will never remove too many instances here
@@ -128,7 +127,7 @@ impl<'a, T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, 
                 .into_iter()
                 .flat_map(|g| g.c.children().unwrap())
                 .map(|c| (c, c.distance_to_instance(self.tree.data(), self.query)))
-                .map(|(c, d)| Grain::new(c, d + c.radius, c.cardinality));
+                .map(|(c, d)| Grain::new(c, d, c.cardinality));
 
             self.grains = leaves.into_iter().chain(children).collect();
             self.layer = self.grains.iter().map(|g| g.c).collect();
@@ -168,7 +167,7 @@ impl<'a, T: Send + Sync + Copy, U: Number> Grain<'a, T, U> {
     /// threshold distance from the query, i.e., if d_max is greater than or equal to the threshold distance
     fn is_inside(&self, threshold: U) -> bool {
         let d_max = self.d + self.c.radius;
-        d_max < threshold
+        d_max <= threshold
     }
 
     /// A Grain is "outside" the threshold if the closest, best-case possible point is further than

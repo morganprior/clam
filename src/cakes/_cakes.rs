@@ -474,12 +474,12 @@ mod tests {
 
         #[allow(clippy::single_element_loop)]
         for k in [10] {
-            let thresholds_nn = cakes.knn_by_thresholds_2(query, k);
+            let mut thresholds_nn = cakes.knn_by_thresholds_2(query, k);
             let actual_nn = cakes.linear_search_knn(query, k, None);
 
-            let hash_thresholds: HashSet<_> = thresholds_nn.iter().map(|&(i, _)| i).collect();
-            let hash_actual: HashSet<_> = actual_nn.iter().map(|&(i, _)| i).collect();
-            assert_eq!(hash_thresholds, hash_actual);
+            thresholds_nn.sort_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap());
+
+            assert_eq!(actual_nn, thresholds_nn);
 
             assert_eq!(thresholds_nn.len(), actual_nn.len());
         }
