@@ -24,7 +24,7 @@ impl<T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> CAKES<T, U, D> {
     }
 
     pub fn build(mut self, criteria: PartitionCriteria<T, U, D>) -> Self {
-        self.tree = self.tree.par_partition(criteria, true);
+        self.tree = self.tree.partition(&criteria);
         self.depth = self.tree.root().max_leaf_depth();
         self
     }
@@ -73,9 +73,9 @@ impl<T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> CAKES<T, U, D> {
             while !candidates.is_empty() {
                 (terminal, non_terminal) = candidates
                     .drain(..)
-                    .map(|c| (c, self.data().query_to_one(query, c.arg_center())))
-                    .filter(|&(c, d)| d <= (c.radius() + radius))
-                    .partition(|&(c, d)| (c.radius() + d) <= radius);
+                    .map(|c| (c, c.distance_to_instance(self.data(), query)))
+                    .filter(|&(c, d)| d <= (c.radius + radius))
+                    .partition(|&(c, d)| (c.radius + d) <= radius);
                 confirmed.append(&mut terminal);
 
                 (terminal, non_terminal) = non_terminal.drain(..).partition(|&(c, _)| c.is_leaf());
@@ -84,7 +84,7 @@ impl<T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> CAKES<T, U, D> {
                 candidates = non_terminal
                     .drain(..)
                     .flat_map(|(c, d)| {
-                        if d < c.radius() {
+                        if d < c.radius {
                             c.overlapping_children(self.data(), query, radius)
                         } else {
                             c.children().unwrap().to_vec()
@@ -101,7 +101,7 @@ impl<T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> CAKES<T, U, D> {
             .into_iter()
             .flat_map(|(c, d)| {
                 let distances = if c.is_leaf() {
-                    vec![d; c.cardinality()]
+                    vec![d; c.cardinality]
                 } else {
                     self.data().query_to_many(query, c.indices(self.data()))
                 };
@@ -154,10 +154,10 @@ impl<T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> CAKES<T, U, D> {
 
     #[inline(always)]
     fn d_min(&self, c: &Cluster<T, U, D>, d: U) -> U {
-        if d < c.radius() {
+        if d < c.radius {
             U::zero()
         } else {
-            d - c.radius()
+            d - c.radius
         }
     }
 
@@ -226,7 +226,7 @@ impl<T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> CAKES<T, U, D> {
     }
 
     pub fn knn_by_rnn(&self, query: T, k: usize) -> Vec<(usize, U)> {
-        let mut radius = EPSILON + self.tree.root().radius().as_f64() / self.tree.root().cardinality().as_f64();
+        let mut radius = EPSILON + self.tree.root().radius.as_f64() / self.tree.root().cardinality.as_f64();
         let mut hits = self.rnn_search(query, U::from(radius));
 
         while hits.is_empty() {
@@ -333,17 +333,15 @@ mod tests {
         let query = vec![0., 1.];
         let (results, _): (Vec<_>, Vec<_>) = cakes.rnn_search(&query, 1.5).into_iter().unzip();
         assert_eq!(results.len(), 2);
-        assert!(results.contains(&0));
-        assert!(results.contains(&1));
-        assert!(!results.contains(&2));
-        assert!(!results.contains(&3));
+
+        let result_points = results.iter().map(|&i| cakes.data().get(i)).collect::<Vec<_>>();
+        assert!(result_points.contains(&[0., 0.].as_slice()));
+        assert!(result_points.contains(&[1., 1.].as_slice()));
 
         let query = vec![1., 1.];
         let (results, _): (Vec<_>, Vec<_>) = cakes.rnn_search(&query, 0.).into_iter().unzip();
         assert_eq!(results.len(), 1);
-        assert!(!results.contains(&0));
-        assert!(results.contains(&1));
-        assert!(!results.contains(&2));
-        assert!(!results.contains(&3));
+        let result_points = results.iter().map(|&i| cakes.data().get(i)).collect::<Vec<_>>();
+        assert!(result_points.contains(&[1., 1.].as_slice()));
     }
 }

@@ -68,6 +68,6 @@ struct MinCardinality(usize);
 
 impl<T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> PartitionCriterion<T, U, D> for MinCardinality {
     fn check(&self, c: &Cluster<T, U, D>) -> bool {
-        c.cardinality() > self.0
+        c.cardinality > self.0
     }
 }

@@ -34,8 +34,12 @@ impl<'a, T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, 
     }
 
     pub fn refine_step(&mut self) {
-        let centers = self.layer.iter().map(|c| c.arg_center()).collect::<Vec<_>>();
-        let distances = self.tree.data().query_to_many(self.query, &centers);
+        let data = self.tree.data();
+        let distances = self
+            .layer
+            .iter()
+            .map(|c| c.distance_to_instance(data, self.query))
+            .collect::<Vec<_>>();
 
         let mut grains = self
             .layer
@@ -43,10 +47,10 @@ impl<'a, T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, 
             .zip(distances.iter())
             .flat_map(|(c, &d)| {
                 if c.is_singleton() {
-                    vec![Grain::new(c, d, c.cardinality())]
+                    vec![Grain::new(c, d, c.cardinality)]
                 } else {
                     let g = Grain::new(c, d, 1);
-                    let g_max = Grain::new(c, d + c.radius(), c.cardinality() - 1);
+                    let g_max = Grain::new(c, d + c.radius, c.cardinality - 1);
                     vec![g, g_max]
                 }
             })
