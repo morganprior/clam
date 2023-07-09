@@ -13,6 +13,7 @@ pub struct KnnSieve<'a, T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> {
     grains: Vec<Grain<'a, T, U>>,
     is_refined: bool,
     hits: priority_queue::DoublePriorityQueue<usize, OrdNumber<U>>,
+    layer: Vec<&'a Cluster<T, U>>,
 }
 
 impl<'a, T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, D> {
@@ -24,20 +25,22 @@ impl<'a, T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, 
             grains: Vec::new(),
             is_refined: false,
             hits: Default::default(),
+            layer: vec![tree.root()],
         }
     }
 
     pub fn initialize_grains(&mut self) {
-        let mut layer = vec![self.tree.root()];
-        let distances = layer
+        let distances = self
+            .layer
             .iter()
             .map(|c| c.distance_to_instance(self.tree.data(), self.query))
             .collect::<Vec<_>>();
 
-        self.grains = layer
+        self.grains = self
+            .layer
             .drain(..)
             .zip(distances.iter())
-            .map(|(c, &d)| Grain::new(c, d + c.radius, c.cardinality))
+            .map(|(c, &d)| Grain::new(c, d, c.cardinality))
             .collect::<Vec<_>>();
     }
 
@@ -102,7 +105,6 @@ impl<'a, T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, 
                     .iter()
                     .map(|&i| (i, self.tree.data().query_to_one(self.query, i)))
                     .map(|(i, d)| (i, OrdNumber { number: d }));
-
                 self.hits.extend(new_hits);
             });
 
@@ -129,6 +131,7 @@ impl<'a, T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, 
                 .map(|(c, d)| Grain::new(c, d + c.radius, c.cardinality));
 
             self.grains = leaves.into_iter().chain(children).collect();
+            self.layer = self.grains.iter().map(|g| g.c).collect();
             self.initialize_grains();
         }
     }
@@ -164,17 +167,17 @@ impl<'a, T: Send + Sync + Copy, U: Number> Grain<'a, T, U> {
     /// A Grain is "inside" the threshold if the furthest, worst-case possible point is at most as far as
     /// threshold distance from the query, i.e., if d_max is greater than or equal to the threshold distance
     fn is_inside(&self, threshold: U) -> bool {
-        // let d_max = self.d + self.c.radius();
-        self.d < threshold
+        let d_max = self.d + self.c.radius;
+        d_max < threshold
     }
 
     /// A Grain is "outside" the threshold if the closest, best-case possible point is further than
     /// the threshold distance to the query, i.e., if d_min is less than the threshold distance
     fn is_outside(&self, threshold: U) -> bool {
-        let d_min = if self.d - self.c.radius < self.c.radius {
+        let d_min = if self.d < self.c.radius {
             U::zero()
         } else {
-            self.d - self.c.radius - self.c.radius
+            self.d - self.c.radius
         };
         d_min > threshold
     }

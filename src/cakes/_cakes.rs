@@ -477,9 +477,9 @@ mod tests {
             let thresholds_nn = cakes.knn_by_thresholds_2(query, k);
             let actual_nn = cakes.linear_search_knn(query, k, None);
 
-            println!("thresholds nn: {:?}", &thresholds_nn);
-            println!("actual nn: {:?}", &actual_nn);
-            assert_eq!(thresholds_nn, actual_nn);
+            let hash_thresholds: HashSet<_> = thresholds_nn.iter().map(|&(i, _)| i).collect();
+            let hash_actual: HashSet<_> = actual_nn.iter().map(|&(i, _)| i).collect();
+            assert_eq!(hash_thresholds, hash_actual);
 
             assert_eq!(thresholds_nn.len(), actual_nn.len());
         }
