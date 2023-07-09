@@ -8,7 +8,7 @@ use crate::cluster::{Cluster, Tree};
 use crate::dataset::Dataset;
 use crate::utils::helpers;
 
-use super::knn_sieve::KnnSieve;
+use super::{knn_fix_attempt, knn_sieve};
 
 #[derive(Debug)]
 pub struct CAKES<T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> {
@@ -214,7 +214,18 @@ impl<T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> CAKES<T, U, D> {
     }
 
     pub fn knn_by_thresholds(&self, query: T, k: usize) -> Vec<(usize, U)> {
-        let mut sieve = KnnSieve::new(&self.tree, query, k);
+        let mut sieve = knn_sieve::KnnSieve::new(&self.tree, query, k);
+        sieve.initialize_grains();
+        let mut step = 1;
+        while !sieve.is_refined() {
+            sieve.refine_step(step);
+            step += 1;
+        }
+        sieve.extract()
+    }
+
+    pub fn knn_by_thresholds_2(&self, query: T, k: usize) -> Vec<(usize, U)> {
+        let mut sieve = knn_fix_attempt::KnnSieve::new(&self.tree, query, k);
         sieve.initialize_grains();
         let mut step = 1;
         while !sieve.is_refined() {
@@ -438,6 +449,32 @@ mod tests {
         #[allow(clippy::single_element_loop)]
         for k in [3] {
             let thresholds_nn = cakes.knn_by_thresholds(query, k);
+            let actual_nn = cakes.linear_search_knn(query, k, None);
+
+            println!("thresholds nn: {:?}", &thresholds_nn);
+            println!("actual nn: {:?}", &actual_nn);
+            assert_eq!(thresholds_nn, actual_nn);
+
+            assert_eq!(thresholds_nn.len(), actual_nn.len());
+        }
+    }
+
+    #[test]
+    #[ignore = "knn sieve still in progress"]
+    fn test_knn_by_thresholds_2() {
+        let data_name = "knn_f32_euclidean".to_string();
+        let data = random_data::random_f32(5000, 30, 0., 10., 42);
+        let data = data.iter().map(|v| v.as_slice()).collect::<Vec<_>>();
+        let data = VecVec::new(data, euclidean::<_, f32>, data_name, false);
+
+        let query = &random_data::random_f32(1, 30, 0., 1., 44)[0];
+        let criteria = PartitionCriteria::new(true).with_min_cardinality(1);
+
+        let cakes = CAKES::new(data, Some(42)).build(criteria);
+
+        #[allow(clippy::single_element_loop)]
+        for k in [10] {
+            let thresholds_nn = cakes.knn_by_thresholds_2(query, k);
             let actual_nn = cakes.linear_search_knn(query, k, None);
 
             println!("thresholds nn: {:?}", &thresholds_nn);
