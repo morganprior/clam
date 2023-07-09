@@ -23,7 +23,7 @@ impl<T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> CAKES<T, U, D> {
         }
     }
 
-    pub fn build(mut self, criteria: PartitionCriteria<T, U, D>) -> Self {
+    pub fn build(mut self, criteria: PartitionCriteria<T, U>) -> Self {
         self.tree = self.tree.partition(&criteria);
         self.depth = self.tree.root().max_leaf_depth();
         self
@@ -130,7 +130,7 @@ impl<T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> CAKES<T, U, D> {
     }
 
     pub fn knn_search(&self, query: T, k: usize) -> Vec<(usize, U)> {
-        let mut candidates = priority_queue::PriorityQueue::<&Cluster<T, U, D>, RevNumber<U>>::new();
+        let mut candidates = priority_queue::PriorityQueue::<&Cluster<T, U>, RevNumber<U>>::new();
         let d = self.tree.root().distance_to_instance(self.data(), query);
         candidates.push(self.tree.root(), RevNumber(self.d_min(self.tree.root(), d)));
 
@@ -153,7 +153,7 @@ impl<T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> CAKES<T, U, D> {
     }
 
     #[inline(always)]
-    fn d_min(&self, c: &Cluster<T, U, D>, d: U) -> U {
+    fn d_min(&self, c: &Cluster<T, U>, d: U) -> U {
         if d < c.radius {
             U::zero()
         } else {
@@ -162,7 +162,7 @@ impl<T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> CAKES<T, U, D> {
     }
 
     // pop from the top of `candidates` until the top candiadte is a leaf cluster.
-    fn pop_till_leaf(&self, query: T, candidates: &mut priority_queue::PriorityQueue<&Cluster<T, U, D>, RevNumber<U>>) {
+    fn pop_till_leaf(&self, query: T, candidates: &mut priority_queue::PriorityQueue<&Cluster<T, U>, RevNumber<U>>) {
         while !candidates.peek().unwrap().0.is_leaf() {
             let [l, r] = candidates.pop().unwrap().0.children().unwrap();
             let [dl, dr] = [
@@ -179,7 +179,7 @@ impl<T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> CAKES<T, U, D> {
         &self,
         query: T,
         hits: &mut priority_queue::PriorityQueue<usize, OrdNumber<U>>,
-        candidates: &mut priority_queue::PriorityQueue<&Cluster<T, U, D>, RevNumber<U>>,
+        candidates: &mut priority_queue::PriorityQueue<&Cluster<T, U>, RevNumber<U>>,
     ) {
         let (leaf, RevNumber(d)) = candidates.pop().unwrap();
         let is = leaf.indices(self.data());
@@ -316,6 +316,8 @@ impl<T: Number> Ord for RevNumber<T> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
     use crate::core::dataset::VecVec;
     use distances::vectors::euclidean;
 
@@ -343,5 +345,54 @@ mod tests {
         assert_eq!(results.len(), 1);
         let result_points = results.iter().map(|&i| cakes.data().get(i)).collect::<Vec<_>>();
         assert!(result_points.contains(&[1., 1.].as_slice()));
+    }
+
+    #[test]
+    fn rnn_search() {
+        let data = (-100..=100).map(|x| vec![x as f32]).collect::<Vec<_>>();
+        let data = data.iter().map(|x| x.as_slice()).collect::<Vec<_>>();
+        let data = VecVec::new(data, euclidean, "test".to_string(), false);
+        let criteria = PartitionCriteria::new(true);
+        let cakes = CAKES::new(data, Some(42)).build(criteria);
+
+        let queries = (-10..=10).step_by(2).map(|x| vec![x as f32]).collect::<Vec<_>>();
+        for v in [2, 10, 50] {
+            let radius = v as f32;
+            let n_hits = 1 + 2 * v;
+
+            for (i, query) in queries.iter().enumerate() {
+                let lnn = {
+                    let mut hits = cakes.linear_search(query, radius, None);
+                    hits.sort_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap());
+                    hits
+                };
+                assert_eq!(
+                    n_hits,
+                    lnn.len(),
+                    "Failed linear search: query: {}, radius: {}, linear: {:?}",
+                    i,
+                    radius,
+                    lnn
+                );
+
+                let rnn = {
+                    let mut hits = cakes.rnn_search(query, radius);
+                    hits.sort_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap());
+                    hits
+                };
+                let lnn_i = lnn.iter().map(|&(i, _)| i).collect::<HashSet<_>>();
+                let rnn_i = rnn.iter().map(|&(i, _)| i).collect::<HashSet<_>>();
+                let diff = lnn_i.difference(&rnn_i).copied().collect::<Vec<_>>();
+                assert!(
+                    diff.is_empty(),
+                    "Failed Clustered search: query: {}, radius: {}\nlnn: {:?}\nrnn: {:?}\ndiff: {:?}",
+                    i,
+                    radius,
+                    lnn,
+                    rnn,
+                    diff
+                );
+            }
+        }
     }
 }

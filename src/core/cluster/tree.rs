@@ -12,7 +12,7 @@ use super::{Cluster, PartitionCriteria};
 #[derive(Debug)]
 pub struct Tree<T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> {
     data: D,
-    root: Cluster<T, U, D>,
+    root: Cluster<T, U>,
     _t: std::marker::PhantomData<T>,
 }
 
@@ -32,7 +32,7 @@ impl<T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> Tree<T, U, D> {
 
     /// # Returns
     /// A reference to the root `Cluster` of the tree
-    pub(crate) fn root(&self) -> &Cluster<T, U, D> {
+    pub(crate) fn root(&self) -> &Cluster<T, U> {
         &self.root
     }
 
@@ -60,7 +60,7 @@ impl<T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> Tree<T, U, D> {
     ///
     /// # Returns
     /// A new `Tree` with a partitioned root.
-    pub fn partition(mut self, criteria: &PartitionCriteria<T, U, D>) -> Self {
+    pub fn partition(mut self, criteria: &PartitionCriteria<T, U>) -> Self {
         self.root = self.root.partition(&mut self.data, criteria);
         self
     }

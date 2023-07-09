@@ -10,8 +10,8 @@ pub struct KnnSieve<'a, T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> {
     tree: &'a Tree<T, U, D>,
     query: T,
     k: usize,
-    layer: Vec<&'a Cluster<T, U, D>>,
-    leaves: Vec<Grain<'a, T, U, D>>,
+    layer: Vec<&'a Cluster<T, U>>,
+    leaves: Vec<Grain<'a, T, U>>,
     is_refined: bool,
     hits: priority_queue::DoublePriorityQueue<usize, OrdNumber<U>>,
 }
@@ -80,15 +80,15 @@ impl<'a, T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, 
 }
 
 #[allow(dead_code)]
-struct Grain<'a, T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> {
+struct Grain<'a, T: Send + Sync + Copy, U: Number> {
     t: std::marker::PhantomData<T>,
-    c: &'a Cluster<T, U, D>,
+    c: &'a Cluster<T, U>,
     d: U,
     multiplicity: usize,
 }
 
-impl<'a, T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> Grain<'a, T, U, D> {
-    fn new(c: &'a Cluster<T, U, D>, d: U, multiplicity: usize) -> Self {
+impl<'a, T: Send + Sync + Copy, U: Number> Grain<'a, T, U> {
+    fn new(c: &'a Cluster<T, U>, d: U, multiplicity: usize) -> Self {
         let t = Default::default();
         Self { t, c, d, multiplicity }
     }
