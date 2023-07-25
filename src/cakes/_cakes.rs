@@ -226,10 +226,10 @@ impl<T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> CAKES<T, U, D> {
 
     pub fn knn_by_thresholds_2(&self, query: T, k: usize) -> Vec<(usize, U)> {
         let mut sieve = knn_fix_attempt::KnnSieve::new(&self.tree, query, k);
-        sieve.initialize_grains();
         let mut step = 1;
+        sieve.initialize_grains(step);
         while !sieve.is_refined() {
-            sieve.refine_step(step);
+            sieve.refine_step();
             step += 1;
         }
         sieve.extract()
@@ -466,22 +466,26 @@ mod tests {
         let data = random_data::random_f32(5000, 30, 0., 10., 42);
         let data = data.iter().map(|v| v.as_slice()).collect::<Vec<_>>();
         let data = VecVec::new(data, euclidean::<_, f32>, data_name, false);
-
         let query = &random_data::random_f32(1, 30, 0., 1., 44)[0];
+
+        // let data = (-100..=100).map(|x| vec![x as f32]).collect::<Vec<_>>();
+        // let data = data.iter().map(|x| x.as_slice()).collect::<Vec<_>>();
+        // let data = VecVec::new(data, euclidean::<_, f32>, "test".to_string(), false);
+        // let query = &(-10..=10).step_by(2).map(|x| vec![x as f32]).collect::<Vec<_>>()[0];
+
         let criteria = PartitionCriteria::new(true).with_min_cardinality(1);
 
         let cakes = CAKES::new(data, Some(42)).build(criteria);
 
         #[allow(clippy::single_element_loop)]
         for k in [10] {
-            let mut thresholds_nn = cakes.knn_by_thresholds_2(query, k);
-            let actual_nn = cakes.linear_search_knn(query, k, None);
+            let mut thresholds_nn = cakes.knn_by_thresholds_2(&query, k);
+            let actual_nn = cakes.linear_search_knn(&query, k, None);
 
             thresholds_nn.sort_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap());
 
-            assert_eq!(actual_nn, thresholds_nn);
-
             assert_eq!(thresholds_nn.len(), actual_nn.len());
+            assert_eq!(actual_nn, thresholds_nn);
         }
     }
 }

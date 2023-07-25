@@ -45,8 +45,8 @@ impl<'a, T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, 
                     vec![Grain::new(c, d, c.cardinality)]
                 } else {
                     // If radius is non-zero, we may only take a subset of the cluster.
-                    // We are guarunteed one point (the center) a distance d from the query.
-                    // We are guarunteed cardinality-1 other points a distance of d+radius from the query,
+                    // We are guaranteed one point (the center) a distance d from the query.
+                    // We are guaranteed cardinality-1 other points a distance of d+radius from the query,
                     // as this reflects the "worst case scenario" for an instance's position within the cluster.
                     let g = Grain::new(c, d, 1);
                     let g_max = Grain::new(c, d + c.radius, c.cardinality - 1);
@@ -79,14 +79,14 @@ impl<'a, T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, 
 
         // Filters grains by being outside the threshold.
         // Ties are added to hits together; we will never remove too many instances here
-        // because our choice of threshold guaruntees enough instances.
+        // because our choice of threshold guarantees enough instances.
         while !self.hits.is_empty() && self.hits.peek_max().unwrap().1.number > threshold {
             self.hits.pop_max().unwrap();
         }
 
         // partition into insiders and straddlers
         // where we filter for grains being outside the threshold could be made more
-        // efficient by leveraging the fact that parition already puts items on the correct
+        // efficient by leveraging the fact that partition already puts items on the correct
         // side of the threshold element
         let (mut insiders, mut straddlers): (Vec<_>, Vec<_>) = self
             .grains
@@ -99,7 +99,7 @@ impl<'a, T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, 
             println!("card is {}", ins.multiplicity);
         }
 
-        // distinguish between those        println!("insiders are: {:?}", returable_insiders);
+        // distinguish between those        println!("insiders are: {:?}", returnable_insiders);
         // insiders we won't partition further and those we will
         // add instances from insiders we won't further partition to hits
         let (small_insiders, big_insiders): (Vec<_>, Vec<_>) = insiders

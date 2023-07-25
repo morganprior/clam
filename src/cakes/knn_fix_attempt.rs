@@ -29,7 +29,10 @@ impl<'a, T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, 
         }
     }
 
-    pub fn initialize_grains(&mut self) {
+    pub fn initialize_grains(&mut self, step: usize) {
+        if step == 1 {
+            self.layer = self.layer.iter().flat_map(|c| c.children().unwrap()).collect();
+        }
         let distances = self
             .layer
             .iter()
@@ -48,14 +51,13 @@ impl<'a, T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, 
         self.is_refined
     }
 
-    pub fn refine_step(&mut self, _step: usize) {
+    pub fn refine_step(&mut self) {
         let i = Grain::partition_kth(&mut self.grains, self.k);
-        let threshold = self.grains[i].d;
+        let threshold = self.grains[i].d + self.grains[i].c.radius;
 
         // Filters grains by being outside the threshold.
         // Ties are added to hits together; we will never remove too many instances here
         // because our choice of threshold guarantees enough instances.
-
         while !self.hits.is_empty() && self.hits.peek_max().unwrap().1.number > threshold {
             self.hits.pop_max().unwrap();
         }
@@ -84,7 +86,6 @@ impl<'a, T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, 
                 .iter()
                 .map(|i| (i, self.tree.data().query_to_one(self.query, *i)))
                 .map(|(i, d)| (*i, OrdNumber { number: d }));
-
             self.hits.extend(new_hits);
         });
 
@@ -104,6 +105,8 @@ impl<'a, T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, 
                     .iter()
                     .map(|&i| (i, self.tree.data().query_to_one(self.query, i)))
                     .map(|(i, d)| (i, OrdNumber { number: d }));
+
+                println!("new hits are: {:?}", new_hits);
                 self.hits.extend(new_hits);
             });
 
@@ -111,13 +114,14 @@ impl<'a, T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, 
                 let mut potential_ties = vec![self.hits.pop_max().unwrap()];
                 while self.hits.len() >= self.k {
                     let item = self.hits.pop_max().unwrap();
-                    if item.1.number < potential_ties.last().unwrap().1.number {
+                    if item.1.number <= potential_ties.last().unwrap().1.number {
                         potential_ties.clear();
                     }
                     potential_ties.push(item);
                 }
                 self.hits.extend(potential_ties.drain(..));
             }
+
             self.is_refined = true;
         } else {
             self.grains = insiders.drain(..).chain(straddlers.drain(..)).collect();
@@ -131,7 +135,6 @@ impl<'a, T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, 
 
             self.grains = leaves.into_iter().chain(children).collect();
             self.layer = self.grains.iter().map(|g| g.c).collect();
-            self.initialize_grains();
         }
     }
 
@@ -167,7 +170,7 @@ impl<'a, T: Send + Sync + Copy, U: Number> Grain<'a, T, U> {
     /// threshold distance from the query, i.e., if d_max is greater than or equal to the threshold distance
     fn is_inside(&self, threshold: U) -> bool {
         let d_max = self.d + self.c.radius;
-        d_max <= threshold
+        d_max < threshold
     }
 
     /// A Grain is "outside" the threshold if the closest, best-case possible point is further than
