@@ -29,10 +29,10 @@ impl<'a, T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, 
         }
     }
 
-    pub fn initialize_grains(&mut self, step: usize) {
-        if step == 1 {
-            self.layer = self.layer.iter().flat_map(|c| c.children().unwrap()).collect();
-        }
+    pub fn initialize_grains(&mut self, _step: usize) {
+        // if step == 1 {
+        //     self.layer = self.layer.iter().flat_map(|c| c.children().unwrap()).collect();
+        // }
         let distances = self
             .layer
             .iter()
@@ -80,12 +80,14 @@ impl<'a, T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, 
             .partition(|g| (g.c.cardinality <= self.k) || g.c.is_leaf());
         insiders = big_insiders;
         small_insiders.into_iter().for_each(|g| {
-            let new_hits = self
-                .tree
-                .indices_of(g.c)
-                .iter()
-                .map(|i| (i, self.tree.data().query_to_one(self.query, *i)))
-                .map(|(i, d)| (*i, OrdNumber { number: d }));
+            let new_hits = self.tree.indices_of(g.c).iter().map(|&i| {
+                (
+                    i,
+                    OrdNumber {
+                        number: self.tree.data().query_to_one(self.query, i),
+                    },
+                )
+            });
             self.hits.extend(new_hits);
         });
 
@@ -106,7 +108,6 @@ impl<'a, T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, 
                     .map(|&i| (i, self.tree.data().query_to_one(self.query, i)))
                     .map(|(i, d)| (i, OrdNumber { number: d }));
 
-                println!("new hits are: {:?}", new_hits);
                 self.hits.extend(new_hits);
             });
 
@@ -134,7 +135,7 @@ impl<'a, T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, 
                 .map(|(c, d)| Grain::new(c, d, c.cardinality));
 
             self.grains = leaves.into_iter().chain(children).collect();
-            self.layer = self.grains.iter().map(|g| g.c).collect();
+            //self.layer = self.grains.iter().map(|g| g.c).collect();
         }
     }
 

@@ -210,7 +210,7 @@ impl<T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> CAKES<T, U, D> {
 
     #[inline(never)]
     pub fn batch_knn_by_thresholds(&self, queries: &[T], k: usize) -> Vec<Vec<(usize, U)>> {
-        queries.iter().map(|&q| self.knn_by_thresholds(q, k)).collect()
+        queries.iter().map(|&q| self.knn_by_thresholds_2(q, k)).collect()
     }
 
     pub fn knn_by_thresholds(&self, query: T, k: usize) -> Vec<(usize, U)> {
@@ -435,6 +435,28 @@ mod tests {
 
     #[test]
     #[ignore = "knn sieve still in progress"]
+    fn test_original_knn() {
+        let f32_data = random_data::random_f32(5000, 30, 0., 10., 42);
+        let f32_data = f32_data.iter().map(|v| v.as_slice()).collect::<Vec<_>>();
+        let f32_data = VecVec::new(f32_data, euclidean::<_, f32>, "f32_euclidean".to_string(), false);
+        let f32_query = &random_data::random_f32(1, 30, 0., 1., 44)[0];
+
+        let criteria = PartitionCriteria::new(true).with_min_cardinality(1);
+        let f32_cakes = CAKES::new(f32_data, Some(42)).build(criteria);
+
+        #[allow(clippy::single_element_loop)]
+        for k in [10] {
+            let mut f32_thresholds_nn = f32_cakes.knn_search(&f32_query, k);
+            let f32_actual_nn = f32_cakes.linear_search_knn(&f32_query, k, None);
+
+            f32_thresholds_nn.sort_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap());
+
+            assert_eq!(f32_actual_nn, f32_thresholds_nn);
+        }
+    }
+
+    #[test]
+    #[ignore = "knn sieve still in progress"]
     fn test_knn_by_thresholds() {
         let data_name = "knn_f32_euclidean".to_string();
         let data = random_data::random_f32(5000, 30, 0., 10., 42);
@@ -462,30 +484,22 @@ mod tests {
     #[test]
     #[ignore = "knn sieve still in progress"]
     fn test_knn_by_thresholds_2() {
-        let data_name = "knn_f32_euclidean".to_string();
-        let data = random_data::random_f32(5000, 30, 0., 10., 42);
-        let data = data.iter().map(|v| v.as_slice()).collect::<Vec<_>>();
-        let data = VecVec::new(data, euclidean::<_, f32>, data_name, false);
-        let query = &random_data::random_f32(1, 30, 0., 1., 44)[0];
-
-        // let data = (-100..=100).map(|x| vec![x as f32]).collect::<Vec<_>>();
-        // let data = data.iter().map(|x| x.as_slice()).collect::<Vec<_>>();
-        // let data = VecVec::new(data, euclidean::<_, f32>, "test".to_string(), false);
-        // let query = &(-10..=10).step_by(2).map(|x| vec![x as f32]).collect::<Vec<_>>()[0];
+        let f32_data = random_data::random_f32(5000, 30, 0., 10., 42);
+        let f32_data = f32_data.iter().map(|v| v.as_slice()).collect::<Vec<_>>();
+        let f32_data = VecVec::new(f32_data, euclidean::<_, f32>, "f32_euclidean".to_string(), false);
+        let f32_query = &random_data::random_f32(1, 30, 0., 1., 44)[0];
 
         let criteria = PartitionCriteria::new(true).with_min_cardinality(1);
-
-        let cakes = CAKES::new(data, Some(42)).build(criteria);
+        let f32_cakes = CAKES::new(f32_data, Some(42)).build(criteria);
 
         #[allow(clippy::single_element_loop)]
         for k in [10] {
-            let mut thresholds_nn = cakes.knn_by_thresholds_2(&query, k);
-            let actual_nn = cakes.linear_search_knn(&query, k, None);
+            let mut f32_thresholds_nn = f32_cakes.knn_by_thresholds_2(&f32_query, k);
+            let f32_actual_nn = f32_cakes.linear_search_knn(&f32_query, k, None);
 
-            thresholds_nn.sort_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap());
+            f32_thresholds_nn.sort_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap());
 
-            assert_eq!(thresholds_nn.len(), actual_nn.len());
-            assert_eq!(actual_nn, thresholds_nn);
+            assert_eq!(f32_actual_nn, f32_thresholds_nn);
         }
     }
 }

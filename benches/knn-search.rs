@@ -14,7 +14,7 @@ fn cakes(c: &mut Criterion) {
 
         group.sampling_mode(SamplingMode::Flat);
 
-        let num_queries = 10_000;
+        let num_queries = 100;
         group.throughput(Throughput::Elements(num_queries as u64));
 
         let seed = 42;
@@ -29,7 +29,7 @@ fn cakes(c: &mut Criterion) {
         let cakes = CAKES::new(dataset, Some(seed)).build(criteria);
 
         for k in [1, 10, 100] {
-            let id = BenchmarkId::new("100k-10", k);
+            let id = BenchmarkId::new("original-100k-10", k);
             group.bench_with_input(id, &k, |b, &k| {
                 b.iter_with_large_drop(|| cakes.batch_knn_search(&queries, k));
             });
@@ -37,6 +37,11 @@ fn cakes(c: &mut Criterion) {
             let id = BenchmarkId::new("par-100k-10", k);
             group.bench_with_input(id, &k, |b, &k| {
                 b.iter_with_large_drop(|| cakes.par_batch_knn_search(&queries, k));
+            });
+
+            let id = BenchmarkId::new("thresholds-100k-10", k);
+            group.bench_with_input(id, &k, |b, &k| {
+                b.iter_with_large_drop(|| cakes.batch_knn_by_thresholds(&queries, k));
             });
         }
 
