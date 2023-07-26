@@ -13,7 +13,6 @@ pub struct KnnSieve<'a, T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> {
     grains: Vec<Grain<'a, T, U>>,
     is_refined: bool,
     hits: priority_queue::DoublePriorityQueue<usize, OrdNumber<U>>,
-    layer: Vec<&'a Cluster<T, U>>,
 }
 
 impl<'a, T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, D> {
@@ -25,25 +24,21 @@ impl<'a, T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, 
             grains: Vec::new(),
             is_refined: false,
             hits: Default::default(),
-            layer: vec![tree.root()],
         }
     }
 
-    pub fn initialize_grains(&mut self, _step: usize) {
-        // if step == 1 {
-        //     self.layer = self.layer.iter().flat_map(|c| c.children().unwrap()).collect();
-        // }
-        let distances = self
-            .layer
+    pub fn initialize_grains(&mut self) {
+        let mut layer = vec![self.tree.root()];
+
+        let distances = layer
             .iter()
             .map(|c| c.distance_to_instance(self.tree.data(), self.query))
             .collect::<Vec<_>>();
 
-        self.grains = self
-            .layer
+        self.grains = layer
             .drain(..)
             .zip(distances.iter())
-            .map(|(c, &d)| Grain::new(c, d, c.cardinality))
+            .flat_map(|(c, &d)| [Grain::new(c, d, 1), Grain::new(c, d + c.radius, c.cardinality - 1)])
             .collect::<Vec<_>>();
     }
 
@@ -53,7 +48,7 @@ impl<'a, T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, 
 
     pub fn refine_step(&mut self) {
         let i = Grain::partition_kth(&mut self.grains, self.k);
-        let threshold = self.grains[i].d + self.grains[i].c.radius;
+        let threshold = self.grains[i].d;
 
         // Filters grains by being outside the threshold.
         // Ties are added to hits together; we will never remove too many instances here
@@ -65,7 +60,7 @@ impl<'a, T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, 
         // partition into insiders and straddlers
         // where we filter for grains being outside the threshold could be made more
         // efficient by leveraging the fact that partition already puts items on the correct
-        // side of the threshold element
+        // side of the threshold elememultiplicitynt
         let (mut insiders, mut straddlers): (Vec<_>, Vec<_>) = self
             .grains
             .drain(..)
@@ -77,7 +72,7 @@ impl<'a, T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, 
         // add instances from insiders we won't further partition to hits
         let (small_insiders, big_insiders): (Vec<_>, Vec<_>) = insiders
             .drain(..)
-            .partition(|g| (g.c.cardinality <= self.k) || g.c.is_leaf());
+            .partition(|g| (g.multiplicity <= self.k) || g.c.is_leaf());
         insiders = big_insiders;
         small_insiders.into_iter().for_each(|g| {
             let new_hits = self.tree.indices_of(g.c).iter().map(|&i| {
@@ -101,12 +96,14 @@ impl<'a, T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, 
         // If straddlers is not empty nor all leaves, partition non-leaves into children
         if straddlers.is_empty() || straddlers.iter().all(|g| g.c.is_leaf()) {
             insiders.drain(..).chain(straddlers.drain(..)).for_each(|g| {
-                let new_hits = self
-                    .tree
-                    .indices_of(g.c)
-                    .iter()
-                    .map(|&i| (i, self.tree.data().query_to_one(self.query, i)))
-                    .map(|(i, d)| (i, OrdNumber { number: d }));
+                let new_hits = self.tree.indices_of(g.c).iter().map(|&i| {
+                    (
+                        i,
+                        OrdNumber {
+                            number: self.tree.data().query_to_one(self.query, i),
+                        },
+                    )
+                });
 
                 self.hits.extend(new_hits);
             });
@@ -127,20 +124,18 @@ impl<'a, T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, 
         } else {
             self.grains = insiders.drain(..).chain(straddlers.drain(..)).collect();
             let (leaves, non_leaves): (Vec<_>, Vec<_>) = self.grains.drain(..).partition(|g| g.c.is_leaf());
-
-            let children = non_leaves
-                .into_iter()
+            let partitionable_grains = non_leaves.iter().filter(|g| g.multiplicity > 1);
+            let children = partitionable_grains
                 .flat_map(|g| g.c.children().unwrap())
                 .map(|c| (c, c.distance_to_instance(self.tree.data(), self.query)))
-                .map(|(c, d)| Grain::new(c, d, c.cardinality));
+                .flat_map(|(c, d)| [Grain::new(c, d, 1), Grain::new(c, d + c.radius, c.cardinality - 1)]);
 
             self.grains = leaves.into_iter().chain(children).collect();
-            //self.layer = self.grains.iter().map(|g| g.c).collect();
         }
     }
 
     pub fn extract(&self) -> Vec<(usize, U)> {
-        self.hits.iter().map(|(i, d)| (*i, d.number)).collect()
+        self.hits.iter().map(|(&i, d)| (i, d.number)).collect()
     }
 }
 
@@ -170,21 +165,27 @@ impl<'a, T: Send + Sync + Copy, U: Number> Grain<'a, T, U> {
     /// A Grain is "inside" the threshold if the furthest, worst-case possible point is at most as far as
     /// threshold distance from the query, i.e., if d_max is greater than or equal to the threshold distance
     fn is_inside(&self, threshold: U) -> bool {
-        let d_max = self.d + self.c.radius;
-        d_max < threshold
+        if self.multiplicity == 1 {
+            return self.d <= threshold;
+        }
+        self.d < threshold
     }
 
     /// A Grain is "outside" the threshold if the closest, best-case possible point is further than
     /// the threshold distance to the query, i.e., if d_min is less than the threshold distance
     fn is_outside(&self, threshold: U) -> bool {
-        let d_min = if self.d < self.c.radius {
-            U::zero()
+        if self.multiplicity == 1 {
+            self.d > threshold
         } else {
-            self.d - self.c.radius
-        };
-        d_min > threshold
-    }
+            let d_min = if self.d < self.c.radius + self.c.radius {
+                U::zero()
+            } else {
+                self.d - self.c.radius - self.c.radius
+            };
 
+            d_min > threshold
+        }
+    }
     fn partition_kth(grains: &mut [Self], k: usize) -> usize {
         let i = Self::_partition_kth(grains, k, 0, grains.len() - 1);
         let t = grains[i].d;
@@ -249,29 +250,6 @@ impl<'a, T: Send + Sync + Copy, U: Number> Grain<'a, T, U> {
 }
 
 #[derive(Debug)]
-//Having a lot of comparison issues, so I reverted this back to the way it was
-
-// struct OrdNumber<U: Number>(U);
-
-// impl<U: Number> PartialEq for OrdNumber<U> {
-//     fn eq(&self, other: &Self) -> bool {
-//         self.0 == other.0
-//     }
-// }
-
-// impl<U: Number> Eq for OrdNumber<U> {}
-
-// impl<U: Number> PartialOrd for OrdNumber<U> {
-//     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-//         self.0.partial_cmp(&other.0)
-//     }
-// }
-
-// impl<U: Number> Ord for OrdNumber<U> {
-//     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-//         self.partial_cmp(other).unwrap()
-//     }
-// }
 
 pub struct OrdNumber<U: Number> {
     pub number: U,

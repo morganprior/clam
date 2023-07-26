@@ -8,7 +8,7 @@ use crate::cluster::{Cluster, Tree};
 use crate::dataset::Dataset;
 use crate::utils::helpers;
 
-use super::{knn_fix_attempt, knn_sieve};
+use super::{knn_thresholds_no_separate_centers, knn_thresholds_separate_centers};
 
 #[derive(Debug)]
 pub struct CAKES<T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> {
@@ -209,28 +209,35 @@ impl<T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> CAKES<T, U, D> {
     }
 
     #[inline(never)]
-    pub fn batch_knn_by_thresholds(&self, queries: &[T], k: usize) -> Vec<Vec<(usize, U)>> {
-        queries.iter().map(|&q| self.knn_by_thresholds_2(q, k)).collect()
+    pub fn batch_knn_by_thresholds_no_separate_centers(&self, queries: &[T], k: usize) -> Vec<Vec<(usize, U)>> {
+        queries
+            .iter()
+            .map(|&q| self.knn_by_thresholds_no_separate_centers(q, k))
+            .collect()
     }
 
-    pub fn knn_by_thresholds(&self, query: T, k: usize) -> Vec<(usize, U)> {
-        let mut sieve = knn_sieve::KnnSieve::new(&self.tree, query, k);
+    #[inline(never)]
+    pub fn batch_knn_by_thresholds_separate_centers(&self, queries: &[T], k: usize) -> Vec<Vec<(usize, U)>> {
+        queries
+            .iter()
+            .map(|&q| self.knn_by_thresholds_separate_centers(q, k))
+            .collect()
+    }
+
+    pub fn knn_by_thresholds_separate_centers(&self, query: T, k: usize) -> Vec<(usize, U)> {
+        let mut sieve = knn_thresholds_separate_centers::KnnSieve::new(&self.tree, query, k);
         sieve.initialize_grains();
-        let mut step = 1;
         while !sieve.is_refined() {
-            sieve.refine_step(step);
-            step += 1;
+            sieve.refine_step();
         }
         sieve.extract()
     }
 
-    pub fn knn_by_thresholds_2(&self, query: T, k: usize) -> Vec<(usize, U)> {
-        let mut sieve = knn_fix_attempt::KnnSieve::new(&self.tree, query, k);
-        let mut step = 1;
-        sieve.initialize_grains(step);
+    pub fn knn_by_thresholds_no_separate_centers(&self, query: T, k: usize) -> Vec<(usize, U)> {
+        let mut sieve = knn_thresholds_no_separate_centers::KnnSieve::new(&self.tree, query, k);
+        sieve.initialize_grains();
         while !sieve.is_refined() {
             sieve.refine_step();
-            step += 1;
         }
         sieve.extract()
     }
@@ -456,8 +463,8 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "knn sieve still in progress"]
-    fn test_knn_by_thresholds() {
+    // This test passes but the approach is incorrectly implemented, which is why it's so slow.
+    fn test_knn_by_thresholds_separate_centers() {
         let data_name = "knn_f32_euclidean".to_string();
         let data = random_data::random_f32(5000, 30, 0., 10., 42);
         let data = data.iter().map(|v| v.as_slice()).collect::<Vec<_>>();
@@ -469,21 +476,17 @@ mod tests {
         let cakes = CAKES::new(data, Some(42)).build(criteria);
 
         #[allow(clippy::single_element_loop)]
-        for k in [3] {
-            let thresholds_nn = cakes.knn_by_thresholds(query, k);
+        for k in [10] {
+            let mut thresholds_nn = cakes.knn_by_thresholds_separate_centers(query, k);
             let actual_nn = cakes.linear_search_knn(query, k, None);
-
-            println!("thresholds nn: {:?}", &thresholds_nn);
-            println!("actual nn: {:?}", &actual_nn);
-            assert_eq!(thresholds_nn, actual_nn);
-
-            assert_eq!(thresholds_nn.len(), actual_nn.len());
+            thresholds_nn.sort_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap());
+            assert_eq!(actual_nn.len(), thresholds_nn.len());
+            assert_eq!(actual_nn, thresholds_nn);
         }
     }
 
     #[test]
-    #[ignore = "knn sieve still in progress"]
-    fn test_knn_by_thresholds_2() {
+    fn test_knn_by_thresholds_no_separate_centers() {
         let f32_data = random_data::random_f32(5000, 30, 0., 10., 42);
         let f32_data = f32_data.iter().map(|v| v.as_slice()).collect::<Vec<_>>();
         let f32_data = VecVec::new(f32_data, euclidean::<_, f32>, "f32_euclidean".to_string(), false);
@@ -494,7 +497,7 @@ mod tests {
 
         #[allow(clippy::single_element_loop)]
         for k in [10] {
-            let mut f32_thresholds_nn = f32_cakes.knn_by_thresholds_2(&f32_query, k);
+            let mut f32_thresholds_nn = f32_cakes.knn_by_thresholds_no_separate_centers(&f32_query, k);
             let f32_actual_nn = f32_cakes.linear_search_knn(&f32_query, k, None);
 
             f32_thresholds_nn.sort_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap());

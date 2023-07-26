@@ -14,12 +14,12 @@ fn cakes(c: &mut Criterion) {
 
         group.sampling_mode(SamplingMode::Flat);
 
-        let num_queries = 100;
+        let num_queries = 4;
         group.throughput(Throughput::Elements(num_queries as u64));
 
         let seed = 42;
         let (dimensionality, min_val, max_val) = (10, 0., 1.);
-        let data = random_data::random_f32(100_000, dimensionality, min_val, max_val, seed);
+        let data = random_data::random_f32(600_000, dimensionality, min_val, max_val, seed);
         let queries = random_data::random_f32(num_queries, dimensionality, min_val, max_val, seed);
         let data = data.iter().map(|v| v.as_slice()).collect::<Vec<_>>();
         let queries = queries.iter().map(|v| v.as_slice()).collect::<Vec<_>>();
@@ -29,19 +29,29 @@ fn cakes(c: &mut Criterion) {
         let cakes = CAKES::new(dataset, Some(seed)).build(criteria);
 
         for k in [1, 10, 100] {
+            let id = BenchmarkId::new("linear-100k-10", k);
+            group.bench_with_input(id, &k, |b, &k| {
+                b.iter_with_large_drop(|| cakes.batch_linear_search_knn(&queries, k));
+            });
+
             let id = BenchmarkId::new("original-100k-10", k);
             group.bench_with_input(id, &k, |b, &k| {
                 b.iter_with_large_drop(|| cakes.batch_knn_search(&queries, k));
             });
 
-            let id = BenchmarkId::new("par-100k-10", k);
+            // let id = BenchmarkId::new("par-100k-10", k);
+            // group.bench_with_input(id, &k, |b, &k| {
+            //     b.iter_with_large_drop(|| cakes.par_batch_knn_search(&queries, k));
+            // });
+
+            let id = BenchmarkId::new("thresholds-no-sep-cent-100k-10", k);
             group.bench_with_input(id, &k, |b, &k| {
-                b.iter_with_large_drop(|| cakes.par_batch_knn_search(&queries, k));
+                b.iter_with_large_drop(|| cakes.batch_knn_by_thresholds_no_separate_centers(&queries, k));
             });
 
-            let id = BenchmarkId::new("thresholds-100k-10", k);
+            let id = BenchmarkId::new("thresholds-sep-cent-100k-10", k);
             group.bench_with_input(id, &k, |b, &k| {
-                b.iter_with_large_drop(|| cakes.batch_knn_by_thresholds(&queries, k));
+                b.iter_with_large_drop(|| cakes.batch_knn_by_thresholds_separate_centers(&queries, k));
             });
         }
 
