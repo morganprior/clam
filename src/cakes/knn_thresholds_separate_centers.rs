@@ -72,8 +72,8 @@ impl<'a, T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, 
         // add instances from insiders we won't further partition to hits
         let (small_insiders, big_insiders): (Vec<_>, Vec<_>) = insiders
             .drain(..)
-            .partition(|g| (g.multiplicity <= self.k) || g.c.is_leaf()); // TODO: fix this so that only Grains with cluster CARDINALITY, not multiplicity <= k stay
-        insiders = big_insiders;
+            .partition(|g| (g.c.cardinality <= self.k) || g.c.is_leaf()); // TODO: fix this so that only Grains with cluster CARDINALITY, not multiplicity <= k stay
+        insiders = big_insiders.into_iter().filter(|g| g.multiplicity > 1).collect();
         // need to do a similar thing for the centers that ONLY adds center point, which is why
         // I want arg center again.
         // Right now instead of adding just the center to hits it adds everything in the cluster
