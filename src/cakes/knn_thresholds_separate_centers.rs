@@ -13,6 +13,7 @@ pub struct KnnSieve<'a, T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> {
     grains: Vec<Grain<'a, T, U>>,
     is_refined: bool,
     hits: priority_queue::DoublePriorityQueue<usize, OrdNumber<U>>,
+    layer: Vec<&'a Cluster<T, U>>,
 }
 
 impl<'a, T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, D> {
@@ -24,6 +25,7 @@ impl<'a, T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, 
             grains: Vec::new(),
             is_refined: false,
             hits: Default::default(),
+            layer: vec![tree.root()],
         }
     }
 
@@ -73,7 +75,7 @@ impl<'a, T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, 
         let (small_insiders, big_insiders): (Vec<_>, Vec<_>) = insiders
             .drain(..)
             .partition(|g| (g.c.cardinality <= self.k) || g.c.is_leaf()); // TODO: fix this so that only Grains with cluster CARDINALITY, not multiplicity <= k stay
-        insiders = big_insiders.into_iter().filter(|g| g.multiplicity > 1).collect();
+        insiders = big_insiders;
         // need to do a similar thing for the centers that ONLY adds center point, which is why
         // I want arg center again.
         // Right now instead of adding just the center to hits it adds everything in the cluster
@@ -127,13 +129,15 @@ impl<'a, T: Send + Sync + Copy, U: Number, D: Dataset<T, U>> KnnSieve<'a, T, U, 
         } else {
             self.grains = insiders.drain(..).chain(straddlers.drain(..)).collect();
             let (leaves, non_leaves): (Vec<_>, Vec<_>) = self.grains.drain(..).partition(|g| g.c.is_leaf());
-            let partitionable_grains = non_leaves.iter().filter(|g| g.multiplicity > 1);
+            let (partitionable_grains, np_grains): (Vec<_>, Vec<_>) =
+                non_leaves.into_iter().partition(|g| g.multiplicity > 1);
             let children = partitionable_grains
+                .iter()
                 .flat_map(|g| g.c.children().unwrap())
                 .map(|c| (c, c.distance_to_instance(self.tree.data(), self.query)))
                 .flat_map(|(c, d)| [Grain::new(c, d, 1), Grain::new(c, d + c.radius, c.cardinality - 1)]);
 
-            self.grains = leaves.into_iter().chain(children).collect();
+            self.grains = leaves.into_iter().chain(children).chain(np_grains).collect();
         }
     }
 
