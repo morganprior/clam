@@ -92,13 +92,13 @@ def create_plots(
         ax.set_ylabel(prop)
 
         if prop.startswith("ratio"):
-            # Set the y-axis limits to (0, 1.05)
+            # Set the y-axis limits to (-0.05, 1.05)
             ax.set_ylim(0, 1.05)
 
         # Tighten the layout
         fig.tight_layout()
 
         # Save the figure
-        output_file_name = f"{dataset}_{metric}_{prop}_vs_depth.png"
+        output_file_name = f"{prop}.png"
         output_file = output_dir.joinpath(output_file_name)
         fig.savefig(output_file, dpi=300)
