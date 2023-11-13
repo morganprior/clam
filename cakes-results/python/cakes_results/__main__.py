@@ -4,6 +4,7 @@ import logging
 
 import typer
 
+from cakes_results import lfd_plots
 from cakes_results import scaling
 
 # Initialize the logger
@@ -15,8 +16,16 @@ logger = logging.getLogger("cakes-results")
 logger.setLevel("INFO")
 
 app = typer.Typer()
+app.add_typer(lfd_plots.app, name="lfd-plots")
 app.add_typer(scaling.app, name="scaling")
 
 
 if __name__ == "__main__":
     app()
+
+
+"""
+python -m cakes_results lfd-plots create-plots \
+    -i ../data/ann-benchmarks/trees \
+    -o ../data/ann-benchmarks/property-plots
+"""
