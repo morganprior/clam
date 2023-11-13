@@ -27,5 +27,9 @@ name = "knn-results"
 path = "src/knn_reports.rs"
 
 [[bin]]
+name = "lfd-plots"
+path = "src/lfd_plots.rs"
+
+[[bin]]
 name = "scaling-results"
 path = "src/scaling_reports.rs"
