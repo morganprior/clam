@@ -1,7 +1,7 @@
 //! Algorithms for K Nearest Neighbor search.
 //!
-//! The stable algorithms are `Linear`, `RepeatedRnn`, `GreedySieve`, `Sieve`,
-//! and `SieveSepCenter`. The default algorithm is `GreedySieve`, as it was the
+//! The stable algorithms are `Linear`, `RepeatedRnn`, `DepthFirstSieve`, `BreadthFirstSieve`,
+//! and `BreadthFirstSieveSepCenter`. The default algorithm is `DepthFirstSieve`, as it was the
 //! best overall performer in our scaling experiments.
 //!
 //! We will experiment with other algorithms in the future, and they will be added
@@ -15,25 +15,21 @@ use priority_queue::PriorityQueue;
 
 use crate::{Cluster, Dataset, Instance, Tree};
 
-pub(crate) mod greedy_sieve;
+pub(crate) mod breadth_first_sieve;
+pub(crate) mod breadth_first_sieve_sep_center;
+pub(crate) mod depth_first_sieve;
 pub(crate) mod linear;
 pub(crate) mod repeated_rnn;
-pub(crate) mod sieve;
-pub(crate) mod sieve_sep_center;
 
 /// The algorithm to use for K-Nearest Neighbor search.
 // TODO(Morgan): Update the docs for each algorithm.
 #[derive(Clone, Copy, Debug)]
 pub enum Algorithm {
     /// Use linear search on the entire dataset.
-    ///
-    /// This is a stable algorithm.
     Linear,
 
     /// Use a repeated RNN search, increasing the radius until enough neighbors
     /// are found.
-    ///
-    /// This is a stable algorithm.
     ///
     /// Search starts with a radius equal to the radius of the tree divided by
     /// the cardinality of the dataset. If no neighbors are found, the radius is
@@ -47,8 +43,6 @@ pub enum Algorithm {
 
     /// Uses two priority queues and an increasing threshold to perform search.
     ///
-    /// This algorithm is not stable.
-    ///
     /// Begins with first priority queue, called `candidates`, wherein the top priority
     /// candidate is the one with the lowest `d_min`. We use `d_min` to express the
     /// theoretical closest a point in a given cluster can be to the query. Replaces
@@ -57,40 +51,33 @@ pub enum Algorithm {
     /// wherein the top priority hit is the one with the highest distance to the query.
     /// Hits are then removed from the queue until the queue has size k. Repeats these steps
     /// until candidates is empty or the closest candidate is worse than the furthest hit.
-    GreedySieve,
+    DepthFirstSieve,
 
-    /// Like `SieveV1`, but without the separate priority queue for hits.
-    ///
-    /// This algorithm is not stable.
+    /// Uses a decreasing threshold to perform search.
     ///
     /// For each iteration of the search, we calculate a threshold from the
     /// `Cluster`s such that the k nearest neighbors of the query are guaranteed
     /// to be within the threshold. We then use this threshold to filter out
-    /// clusters that are too far away from the query. Instead of maintaining
-    /// a separate priority queue for hits, hits are treated as grains.
+    /// clusters that are too far away from the query.
     ///
     /// This approach does not treat the center of a cluster separately from the rest
     /// of the points in the cluster.
-    Sieve,
+    BreadthFirstSieve,
 
-    /// Like `SieveV2`, but without the separate priority queue for hits.
-    ///
-    /// This algorithm is not stable.
+    /// Uses a decreasing threshold to perform search, treating cluster centers separately
+    /// from the rest of their cluster.
     ///
     /// For each iteration of the search, we calculate a threshold from the
     /// `Cluster`s such that the k nearest neighbors of the query are guaranteed
     /// to be within the threshold. We then use this threshold to filter out
-    /// clusters that are too far away from the query. Instead of maintaining
-    /// a separate priority queue for hits, hits are treated as grains.
-    ///
-    /// This approach treats the center of a cluster separately from the rest
-    /// of the points in the cluster.
-    SieveSepCenter,
+    /// clusters that are too far away from the query. This approach treats the
+    /// center of a cluster separately from the rest of the points in the cluster.
+    BreadthFirstSieveSepCenter,
 }
 
 impl Default for Algorithm {
     fn default() -> Self {
-        Self::GreedySieve
+        Self::DepthFirstSieve
     }
 }
 
@@ -120,9 +107,9 @@ impl Algorithm {
                 linear::search(tree.data(), query, k, &indices)
             }
             Self::RepeatedRnn => repeated_rnn::search(tree, query, k),
-            Self::GreedySieve => greedy_sieve::search(tree, query, k),
-            Self::Sieve => sieve::search(tree, query, k),
-            Self::SieveSepCenter => sieve_sep_center::search(tree, query, k),
+            Self::DepthFirstSieve => depth_first_sieve::search(tree, query, k),
+            Self::BreadthFirstSieve => breadth_first_sieve::search(tree, query, k),
+            Self::BreadthFirstSieveSepCenter => breadth_first_sieve_sep_center::search(tree, query, k),
         }
     }
 
@@ -132,9 +119,9 @@ impl Algorithm {
         match self {
             Self::Linear => "Linear",
             Self::RepeatedRnn => "RepeatedRnn",
-            Self::GreedySieve => "GreedySieve",
-            Self::Sieve => "Sieve",
-            Self::SieveSepCenter => "SieveSepCenter",
+            Self::DepthFirstSieve => "DepthFirstSieve",
+            Self::BreadthFirstSieve => "BreadthFirstSieve",
+            Self::BreadthFirstSieveSepCenter => "BreadthFirstSieveSepCenter",
         }
     }
 
@@ -157,9 +144,9 @@ impl Algorithm {
         match s.to_lowercase().as_str() {
             "linear" => Ok(Self::Linear),
             "repeatedrnn" => Ok(Self::RepeatedRnn),
-            "greedysieve" => Ok(Self::GreedySieve),
-            "sieve" => Ok(Self::Sieve),
-            "sievesepcenter" => Ok(Self::SieveSepCenter),
+            "depthfirstsieve" => Ok(Self::DepthFirstSieve),
+            "breadthfirstsieve" => Ok(Self::BreadthFirstSieve),
+            "breadthfirstsievesepcenter" => Ok(Self::BreadthFirstSieveSepCenter),
             _ => Err(format!("Unknown algorithm: {s}")),
         }
     }
@@ -167,7 +154,12 @@ impl Algorithm {
     /// Returns a list of all the algorithms, excluding Linear.
     #[must_use]
     pub const fn variants<'a>() -> &'a [Self] {
-        &[Self::RepeatedRnn, Self::GreedySieve, Self::Sieve, Self::SieveSepCenter]
+        &[
+            Self::RepeatedRnn,
+            Self::DepthFirstSieve,
+            Self::BreadthFirstSieve,
+            Self::BreadthFirstSieveSepCenter,
+        ]
     }
 }
 

@@ -3,7 +3,7 @@
 use crate::{pancakes::CodecData, pancakes::SquishyBall, Cluster, Instance};
 use distances::number::UInt;
 
-use crate::cakes::knn::greedy_sieve::d_min;
+use crate::cakes::knn::depth_first_sieve::d_min;
 use crate::cakes::knn::OrdNumber;
 use crate::cakes::knn::RevNumber;
 

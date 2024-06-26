@@ -113,7 +113,7 @@ mod tests {
         let query = "NAJIBEATSPEPPERS".to_string();
         let k = 2;
 
-        for algo in [knn::Algorithm::Linear, knn::Algorithm::GreedySieve] {
+        for algo in [knn::Algorithm::Linear, knn::Algorithm::DepthFirstSieve] {
             let result = codec_dataset.knn_search(&query, k, &algo);
 
             println!("{}: {result:?}", algo.name());

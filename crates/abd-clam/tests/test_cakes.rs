@@ -72,7 +72,7 @@ fn line() {
     }
 }
 
-#[ignore = "Fails with Sieve and SieveSepCenter."]
+#[ignore = "Fails with BreadthFirstSieve and BreadthFirstSieveSepCenter."]
 #[test_case(1000, 10; "1k_10")]
 #[test_case(1000, 100; "1k_100")]
 #[test_case(10_000, 10; "10k_10")]
