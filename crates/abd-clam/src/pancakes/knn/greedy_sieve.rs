@@ -50,7 +50,7 @@ where
         trim_hits(k, &mut hits);
     }
 
-    todo!();
+    hits.into_iter().map(|(i, OrdNumber(d))| (i, d)).collect()
 }
 
 /// Pops from the top of `candidates` until the top candidate is a leaf cluster.

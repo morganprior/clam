@@ -113,13 +113,15 @@ mod tests {
         let query = "NAJIBEATSPEPPERS".to_string();
         let k = 2;
 
-        for algo in [knn::Algorithm::Linear] {
+        for algo in [knn::Algorithm::Linear, knn::Algorithm::GreedySieve] {
             let result = codec_dataset.knn_search(&query, k, &algo);
 
             println!("{}: {result:?}", algo.name());
             assert_eq!(
                 [dataset[result[0].0].clone(), dataset[result[1].0].clone()],
-                ["NAJIBEATS-PEPPERS", "NAJIB-EATSPEPPERS"]
+                ["NAJIBEATS-PEPPERS", "NAJIB-EATSPEPPERS"],
+                "Failed on Algorithm: {:?}",
+                algo.name()
             );
         }
 
