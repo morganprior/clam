@@ -1,14 +1,12 @@
-//! Search function and helper functions for Knn thresholds approach with no separate grains for
-//! cluster centers.
+//! K-NN search with Breadth-First Sieve.
 
+use crate::{pancakes::CodecData, pancakes::SquishyBall, Cluster, Instance};
 use core::cmp::{min, Ordering};
-use distances::Number;
+use distances::number::UInt;
 
-use crate::{Cluster, Dataset, Instance, Tree};
-
-/// A Grain is an element of the sieve. It is either a hit or a cluster.
-#[derive(Clone, Copy, Debug)]
-enum Grain<'a, U: Number, C: Cluster<U>> {
+/// A Grain is an element of the sieve. It is either a hit or a `SquishyBall`.
+#[derive(Clone, Debug)]
+enum Grain<'a, U: UInt> {
     /// A `Hit` is a single instance.
     Hit {
         /// Distance from the query to the instance.
@@ -16,31 +14,32 @@ enum Grain<'a, U: Number, C: Cluster<U>> {
         /// Index of the instance.
         index: usize,
     },
-    /// A `Cluster`.
-    Cluster {
-        /// The cluster.
-        c: &'a C,
-        /// Theoretical worst case distance from the query to a point in the cluster.
+    /// A `SquishyBall`.
+    SquishyBall {
+        /// The `SquishyBall`.
+        s: &'a SquishyBall<U>,
+        /// Theoretical worst case distance from the query to a point in the `SquishyBall`.
         d: U,
-        /// The diameter of the cluster.
+        /// The diameter of the `SquishyBall`.
         diameter: U,
-        /// The number of instances in the cluster.
+        /// The number of instances in the `SquishyBall`.
         multiplicity: usize,
-        /// Whether the cluster is a leaf.
-        is_leaf: bool,
+        /// Whether the `SquishyBall` is a compressible leaf.
+        squish: bool,
     },
 }
 
-impl<'a, U: Number, C: Cluster<U>> Grain<'a, U, C> {
-    /// Creates a new `Grain` from a cluster.
-    fn new_cluster(c: &'a C, d: U) -> Self {
-        let r = c.radius();
-        Self::Cluster {
-            c,
+impl<'a, U: UInt> Grain<'a, U> {
+    /// Creates a new `Grain` from a `SquishyBall`.
+    fn new_squishy(s: &'a SquishyBall<U>, d: U) -> Self {
+        let cluster = s.uni_ball();
+        let r = cluster.radius();
+        Self::SquishyBall {
+            s,
             d: d + r,
             diameter: r + r,
-            multiplicity: c.cardinality(),
-            is_leaf: c.is_leaf(),
+            multiplicity: cluster.cardinality(),
+            squish: s.squish(),
         }
     }
 
@@ -50,12 +49,12 @@ impl<'a, U: Number, C: Cluster<U>> Grain<'a, U, C> {
     }
 
     /// Returns the theoretical minimum distance from the query to a point in
-    /// the grain if the grain is of the `Cluster` variant; returns the
+    /// the grain if the grain is of the `SquishyBall` variant; returns the
     /// distance to the instance if the grain is of the `Hit` variant.
     fn d_min(&self) -> U {
         match self {
             Grain::Hit { d, .. } => *d,
-            Grain::Cluster { d, diameter, .. } => *d - *diameter,
+            Grain::SquishyBall { d, diameter, .. } => *d - *diameter,
         }
     }
 
@@ -64,33 +63,42 @@ impl<'a, U: Number, C: Cluster<U>> Grain<'a, U, C> {
     /// distance to the instance if the `Grain` is of the `Hit` variant.
     const fn d(&self) -> U {
         match self {
-            Grain::Hit { d, .. } | Grain::Cluster { d, .. } => *d,
+            Grain::Hit { d, .. } | Grain::SquishyBall { d, .. } => *d,
         }
     }
 
-    /// Returns whether the `Grain` has k or fewer instances or is a leaf.
+    /// Returns whether the `Grain` has k or fewer instances or is a compressible leaf.
     const fn is_small(&self, k: usize) -> bool {
         match self {
             Grain::Hit { .. } => true,
-            Grain::Cluster {
-                multiplicity, is_leaf, ..
-            } => *multiplicity <= k || *is_leaf,
+            Grain::SquishyBall {
+                multiplicity, squish, ..
+            } => *multiplicity <= k || *squish,
         }
     }
 
-    /// Returns whether the `Grain` is outside the threshold.
+    /// Returns whether the grain is outside the threshold.
     fn is_outside(&self, threshold: U) -> bool {
         self.d_min() > threshold
     }
 
-    /// Returns the indices of the instances in the cluster if the `Grain` is of
-    /// the `Cluster` variant
-    fn cluster_to_hits<I: Instance, D: Dataset<I, U>>(self, data: &D, query: &I) -> Vec<Self> {
+    /// Returns the indices of the instances in the cluster if the grain is of
+    /// the `SquishyBall` variant
+    fn squishyball_to_hits<I, M>(self, data: &CodecData<I, U, M>, query: &I) -> Vec<Self>
+    where
+        I: Instance,
+        M: Instance,
+    {
         match self {
             Grain::Hit { .. } => unreachable!("This is only called on non-hits."),
-            Grain::Cluster { c, .. } => {
-                let distances = data.query_to_many(query, &c.indices().collect::<Vec<_>>());
-                c.indices()
+            Grain::SquishyBall { s, .. } => {
+                let points = data
+                    .load_leaf_data(s)
+                    .unwrap_or_else(|e| unreachable!("This should only be called on compressible leaves: {e}"));
+
+                let distances: Vec<U> = points.into_iter().map(|point| data.metric()(query, &point)).collect();
+
+                s.indices()
                     .zip(distances)
                     .map(|(index, d)| Grain::new_hit(d, index))
                     .collect::<Vec<_>>()
@@ -98,13 +106,13 @@ impl<'a, U: Number, C: Cluster<U>> Grain<'a, U, C> {
         }
     }
 
-    /// Returns the children of the cluster if the grain is of the `Cluster` variant
-    fn cluster_to_children(self) -> [&'a C; 2] {
+    /// Returns the children of the cluster if the `Grain` is of the `Cluster`
+    fn squishyball_to_children(self) -> [&'a SquishyBall<U>; 2] {
         match self {
             Grain::Hit { .. } => unreachable!("This is only called on non-hits."),
-            Grain::Cluster { c, .. } => c
+            Grain::SquishyBall { s, .. } => s
                 .children()
-                .unwrap_or_else(|| unreachable!("This is only called on non-leaves.")),
+                .unwrap_or_else(|| unreachable!("This is only called on non-compressible clusters.")),
         }
     }
 
@@ -112,7 +120,7 @@ impl<'a, U: Number, C: Cluster<U>> Grain<'a, U, C> {
     const fn multiplicity(&self) -> usize {
         match self {
             Grain::Hit { .. } => 1,
-            Grain::Cluster { multiplicity, .. } => *multiplicity,
+            Grain::SquishyBall { multiplicity, .. } => *multiplicity,
         }
     }
 
@@ -193,36 +201,38 @@ impl<'a, U: Number, C: Cluster<U>> Grain<'a, U, C> {
     fn index(&self) -> usize {
         match self {
             Grain::Hit { index, .. } => *index,
-            Grain::Cluster { .. } => unreachable!("This is only called on hits."),
+            Grain::SquishyBall { .. } => unreachable!("This is only called on hits."),
         }
     }
 }
-/// K-Nearest Neighbor search using a thresholds approach with no separate centers.
+
+/// Searches for the k nearest neighbors of `query` in `data` using the Breadth-First Sieve algorithm.
 ///
 /// # Arguments
 ///
-/// * `tree` - The tree to search.
-/// * `query` - The query to search around.
-/// * `k` - The number of neighbors to search for.
+/// * `query` - The query point.
+/// * `k` - The number of nearest neighbors to find.
+/// * `data` - The data structure to search.
 ///
 /// # Returns
 ///
-/// A vector of 2-tuples, where the first element is an index of an instance,
-/// and the second element is the distance from the query to the instance.
+/// A vector of pairs `(i, u)` where `i` is the index of a point in the data structure and `u` is the distance
+/// from `query` to that point.
 #[allow(clippy::many_single_char_names)]
-pub fn search<I, U, D, C>(tree: &Tree<I, U, D, C>, query: &I, k: usize) -> Vec<(usize, U)>
+pub fn search<I, U, M>(query: &I, k: usize, data: &CodecData<I, U, M>) -> Vec<(usize, U)>
 where
     I: Instance,
-    U: Number,
-    D: Dataset<I, U>,
-    C: Cluster<U>,
+    U: UInt,
+    M: Instance,
 {
-    let data = tree.data();
-    let c = &tree.root;
-    let d = c.distance_to_instance(data, query);
+    let c = data.root();
+    let centers = &data.centers();
+    let root_center = &centers[&c.arg_center()];
 
-    let mut grains = vec![Grain::new_cluster(c, d)];
-    let [mut insiders, mut non_insiders]: [Vec<_>; 2];
+    let d = data.metric()(root_center, query);
+
+    let mut grains = vec![Grain::new_squishy(c, d)];
+    let [mut insiders, mut non_insiders]: [Vec<Grain<U>>; 2];
 
     loop {
         // The threshold is the minimum distance, so far, which guarantees that
@@ -239,14 +249,14 @@ where
         let (clusters, mut hits) = insiders
             .into_iter()
             .chain(non_insiders)
-            .partition::<Vec<_>, _>(|g| matches!(g, Grain::Cluster { .. }));
+            .partition::<Vec<_>, _>(|g| matches!(g, Grain::SquishyBall { .. }));
 
-        // Separate small (cardinality less than k or leaf) clusters from the rest
+        // Separate small (cardinality less than k or compressible leaf) clusters from the rest
         let (small_clusters, clusters) = clusters.into_iter().partition::<Vec<_>, _>(|g| g.is_small(k));
 
         // Convert small clusters to hits.
         for cluster in small_clusters {
-            hits.append(&mut cluster.cluster_to_hits(data, query));
+            hits.append(&mut cluster.squishyball_to_hits(data, query));
         }
 
         // If there are no more cluster grains, then the search is complete.
@@ -262,9 +272,9 @@ where
         // Partition clusters into children and convert to grains.
         grains = clusters
             .into_iter()
-            .flat_map(Grain::cluster_to_children)
-            .map(|c| (c, c.distance_to_instance(data, query)))
-            .map(|(c, d)| Grain::new_cluster(c, d))
+            .flat_map(Grain::squishyball_to_children)
+            .map(|c| (c, data.metric()(&data.centers()[&c.arg_center()], query)))
+            .map(|(c, d)| Grain::new_squishy(c, d))
             .chain(hits)
             .collect();
     }

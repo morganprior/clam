@@ -1,5 +1,6 @@
 //! K-Nearest Neighbors search in a compressed space.
 
+mod breadth_first_sieve;
 mod depth_first_sieve;
 mod linear;
 
@@ -13,8 +14,10 @@ use super::CodecData;
 pub enum Algorithm {
     /// Use linear search on the dataset.
     Linear,
-    /// Search on the dataset using the Depth-First Sieve algorithm.
+    /// Search the dataset using the Depth-First Sieve algorithm.
     DepthFirstSieve,
+    /// Search the dataset using the Breadth-First Sieve algorithm.
+    BreadthFirstSieve,
 }
 
 impl Default for Algorithm {
@@ -45,6 +48,7 @@ impl Algorithm {
         match self {
             Self::Linear => linear::search(query, k, data),
             Self::DepthFirstSieve => depth_first_sieve::search(query, k, data),
+            Self::BreadthFirstSieve => breadth_first_sieve::search(query, k, data),
         }
     }
 
@@ -54,6 +58,7 @@ impl Algorithm {
         match self {
             Self::Linear => "Linear",
             Self::DepthFirstSieve => "DepthFirstSieve",
+            Self::BreadthFirstSieve => "BreadthFirstSieve",
         }
     }
 
@@ -76,6 +81,7 @@ impl Algorithm {
         match s.to_lowercase().as_str() {
             "linear" => Ok(Self::Linear),
             "depthfirstsieve" => Ok(Self::DepthFirstSieve),
+            "breadthfirstsieve" => Ok(Self::BreadthFirstSieve),
             _ => Err(format!("Unknown algorithm: {s}")),
         }
     }
