@@ -110,7 +110,7 @@ fn main() -> Result<(), String> {
     }
 
     let alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".chars().collect::<Vec<_>>();
-    let seed_string = generate_random_string(1024, &alphabet);
+    let seed_string = generate_random_string(30, &alphabet);
     let penalties = Penalties::<u16>::new(0, 1, 1);
 
     let sizes = [
@@ -163,7 +163,7 @@ fn main() -> Result<(), String> {
         let dataset =
             VecDataset::new(name, clumped_data, lev_metric, true).assign_metadata(clumped_meta)?;
 
-        // Get a baseline for linear search
+        // Get a baseline for linear rnn search
         let baseline_rnn = std::time::Instant::now();
         let hits_rnn = query_data
             .iter()
@@ -182,10 +182,8 @@ fn main() -> Result<(), String> {
             "Baseline RNN: {baseline_rnn:.4}s, num_queries: {}",
             hits_rnn.len()
         );
-        for (qm, hits) in query_meta.iter().zip(hits_rnn.iter()) {
-            // Check that the metadata matches
-            assert!(hits.iter().any(|(m, _)| m == qm))
-        }
+
+        check_baseline_metadata(&query_meta, &hits_rnn);
 
         let baseline_knn = std::time::Instant::now();
         let hits_knn = query_data
@@ -206,14 +204,11 @@ fn main() -> Result<(), String> {
             hits_knn.len()
         );
 
-        // Build Cakes tree
-        let criteria = PartitionCriteria::default();
-        let seed = Some(42);
-        let cakes_time = std::time::Instant::now();
-        let cakes = Cakes::new(dataset, seed, &criteria);
-        let cakes_time = cakes_time.elapsed().as_secs_f32();
-        println!("Cakes built in {cakes_time:.4}s");
+        check_baseline_metadata(&query_meta, &hits_rnn);
 
+        let cakes = build_cakes_tree(dataset);
+
+        // Run baseline rnn search
         let cakes_rnn = std::time::Instant::now();
         let cakes_hits_rnn = query_data
             .iter()
@@ -229,6 +224,7 @@ fn main() -> Result<(), String> {
             baseline_rnn / cakes_rnn
         );
 
+        // Create squishy tree from cakes tree
         let cakes_tree = cakes.trees()[0];
         let dataset = cakes_tree.data();
         let root = cakes_tree.root().clone();
@@ -263,24 +259,7 @@ fn main() -> Result<(), String> {
         let decompression_time = decompression_time.elapsed().as_secs_f32();
         println!("Dataset decompressed in {decompression_time:.4}s");
 
-        assert_eq!(dataset.root().subtree(), re_data.root().subtree());
-        assert_eq!(dataset.centers(), re_data.centers());
-        assert_eq!(dataset.metadata(), re_data.metadata());
-
-        for (&c, &rc) in dataset
-            .root()
-            .subtree()
-            .iter()
-            .zip(re_data.root().subtree().iter())
-        {
-            assert_eq!(c, rc);
-            assert_eq!(c.arg_center(), rc.arg_center());
-            assert_eq!(c.arg_radial(), rc.arg_radial());
-            assert_eq!(c.radius(), rc.radius());
-            assert_eq!(c.arg_poles(), rc.arg_poles());
-            assert_eq!(c.recursive_cost(), rc.recursive_cost());
-            assert_eq!(c.unitary_cost(), rc.unitary_cost());
-        }
+        confirm_successful_reload(&re_data, &dataset);
 
         // Run the queries on the reloaded dataset
         let codec_rnn = std::time::Instant::now();
@@ -298,29 +277,8 @@ fn main() -> Result<(), String> {
             })
             .collect::<Vec<_>>();
         // Check that the hits are the same
-        for ((qm, codec_hits), hits) in query_meta
-            .iter()
-            .zip(codec_hits_rnn.iter())
-            .zip(hits_rnn.iter())
-        {
-            // Check that the metadata matches
-            assert!(codec_hits.iter().any(|(m, _)| m == qm));
+        check_hits(&query_meta, &codec_hits_rnn, &hits_rnn);
 
-            // Check that the number of hits is the same
-            assert_eq!(codec_hits.len(), hits.len());
-
-            // Sort the hits by metadata
-            let mut codec_hits = codec_hits.clone();
-            codec_hits.sort_by(|(m1, _), (m2, _)| m1.cmp(m2));
-            let mut hits = hits.clone();
-            hits.sort_by(|(m1, _), (m2, _)| m1.cmp(m2));
-
-            // Check that the hits are the same
-            for ((m1, d1), (m2, d2)) in codec_hits.iter().zip(hits.iter()) {
-                assert_eq!(m1, m2);
-                assert_eq!(d1, d2);
-            }
-        }
         println!(
             "Codec RNN: {codec_rnn:.4}s, num_queries: {}",
             codec_hits_rnn.len()
@@ -361,4 +319,79 @@ fn main() -> Result<(), String> {
     }
 
     Ok(())
+}
+
+fn check_baseline_metadata(query_meta: &[String], hits_rnn: &[Vec<(String, u16)>]) {
+    for (qm, hits) in query_meta.iter().zip(hits_rnn.iter()) {
+        // Check that the metadata matches
+        assert!(hits.iter().any(|(m, _)| m == qm))
+    }
+}
+
+fn build_cakes_tree(
+    dataset: VecDataset<String, u16, String>,
+) -> Cakes<String, u16, VecDataset<String, u16, String>> {
+    // Build Cakes tree
+    let criteria = PartitionCriteria::default();
+    let seed = Some(42);
+    let cakes_time = std::time::Instant::now();
+    let cakes = Cakes::new(dataset, seed, &criteria);
+    let cakes_time = cakes_time.elapsed().as_secs_f32();
+    println!("Cakes built in {cakes_time:.4}s");
+
+    cakes
+}
+
+fn confirm_successful_reload(
+    re_data: &CodecData<String, u16, String>,
+    dataset: &CodecData<String, u16, String>,
+) {
+    assert_eq!(dataset.root().subtree(), re_data.root().subtree());
+    assert_eq!(dataset.centers(), re_data.centers());
+    assert_eq!(dataset.metadata(), re_data.metadata());
+
+    for (&c, &rc) in dataset
+        .root()
+        .subtree()
+        .iter()
+        .zip(re_data.root().subtree().iter())
+    {
+        assert_eq!(c, rc);
+        assert_eq!(c.arg_center(), rc.arg_center());
+        assert_eq!(c.arg_radial(), rc.arg_radial());
+        assert_eq!(c.radius(), rc.radius());
+        assert_eq!(c.arg_poles(), rc.arg_poles());
+        assert_eq!(c.recursive_cost(), rc.recursive_cost());
+        assert_eq!(c.unitary_cost(), rc.unitary_cost());
+    }
+}
+
+fn check_hits(
+    query_meta: &[String],
+    codec_hits_rnn: &[Vec<(String, u16)>],
+    hits_rnn: &[Vec<(String, u16)>],
+) {
+    for ((qm, codec_hits), hits) in query_meta
+        .iter()
+        .zip(codec_hits_rnn.iter())
+        .zip(hits_rnn.iter())
+    {
+        // Check that the metadata matches
+        assert!(codec_hits.iter().any(|(m, _)| m == qm));
+
+        // Check that the number of hits is the same
+        assert_eq!(codec_hits.len(), hits.len());
+
+        // Sort the hits by metadata
+        let mut codec_hits = codec_hits.clone();
+        codec_hits.sort_by(|(m1, _), (m2, _)| m1.cmp(m2));
+        let mut hits = hits.clone();
+        hits.sort_by(|(m1, _), (m2, _)| m1.cmp(m2));
+
+        // Check that the hits are the same
+        for ((m1, d1), (m2, d2)) in codec_hits.iter().zip(hits.iter()) {
+            assert_eq!(m1, m2);
+            assert_eq!(d1, d2);
+        }
+    }
 }

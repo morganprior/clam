@@ -52,8 +52,8 @@ impl Algorithm {
     #[must_use]
     pub const fn name(&self) -> &str {
         match self {
-            Self::Linear => "Linear",
-            Self::Clustered => "Clustered",
+            Self::Linear => "linear",
+            Self::Clustered => "clustered",
         }
     }
 

@@ -60,10 +60,10 @@ impl Algorithm {
     #[must_use]
     pub const fn name(&self) -> &str {
         match self {
-            Self::Linear => "Linear",
-            Self::DepthFirstSieve => "DepthFirstSieve",
-            Self::BreadthFirstSieve => "BreadthFirstSieve",
-            Self::BreadthFirstSieveSepCenter => "BreadthFirstSieveSepCenter",
+            Self::Linear => "linear",
+            Self::DepthFirstSieve => "depthfirstsieve",
+            Self::BreadthFirstSieve => "breadthfirstsieve",
+            Self::BreadthFirstSieveSepCenter => "breadthfirstsievesepcenter",
         }
     }
 
