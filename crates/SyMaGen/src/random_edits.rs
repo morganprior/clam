@@ -129,7 +129,7 @@ pub fn create_batch<U: UInt, R: Rng>(
 ) -> Vec<String> {
     let mut others = (1..batch_size)
         .map(|_| {
-            // Randomly sample a distance between 1 and `target_distance`, inclusive
+            // Randomly sample a distance between `min_distance`` and `max_distance`, inclusive
             let d = UInt::as_u64(min_distance)
                 + u64::next_random(rng) % UInt::as_u64(max_distance - min_distance + U::one());
             are_we_there_yet(seed_string, penalties, U::from(d), alphabet, rng)
@@ -151,10 +151,12 @@ pub fn create_batch<U: UInt, R: Rng>(
 /// * `clump_size`: The number of strings in each clump.
 /// * `clump_radius`: The target distance from the seed string for each clump.
 /// * `seed`: The seed for the random number generator.
+/// * `inter_clump_distance`: An upper bound on the distance between points on the boundaries of different clumps.
 ///
 /// # Returns
 ///
 /// A vector of randomly generated strings in distinct clumps.
+#[allow(clippy::too_many_arguments)]
 pub fn generate_clumped_data<U: UInt>(
     seed_string: &str,
     penalties: Penalties<U>,
@@ -163,15 +165,16 @@ pub fn generate_clumped_data<U: UInt>(
     clump_size: usize,
     clump_radius: U,
     seed: u64,
+    inter_clump_distance: U,
 ) -> Vec<(String, String)> {
     // TODO(Morgan): add min length and max length for strings as inputs here
 
-    // Vector of seed strings for each clump (can think of as the ``center''s of each clump)
-
-    // TODO(Morgan): change 10 to input parameter inter-clump distance
     let rng = &mut rand::rngs::StdRng::seed_from_u64(seed);
-    let min_distance = clump_radius * U::from(7);
-    let max_distance = clump_radius * U::from(10);
+
+    let min_distance = clump_radius * U::from(2);
+    let max_distance = min_distance + U::from(inter_clump_distance);
+
+    // Vector of seed strings for each clump (can think of as the ``center''s of each clump)
     let clump_seeds = create_batch(
         seed_string,
         penalties,

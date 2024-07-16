@@ -139,7 +139,7 @@ fn main() -> Result<(), String> {
         // let inter_clump_distance: i32 = 15;
         let clumped_data = if !expected_path.exists() {
             let clumped_data =
-                generate_clumped_data(&seed_string, penalties, &alphabet, n, m, 5, seed);
+                generate_clumped_data(&seed_string, penalties, &alphabet, n, m, 5, seed, 2);
             write_data(&clumped_data, &dataset_dir)?;
             clumped_data
         } else {
