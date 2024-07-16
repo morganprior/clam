@@ -38,7 +38,9 @@ pub fn generate_random_string(length: usize, alphabet: &[char]) -> String {
 /// A random edit (Deletion, Insertion, or Substitution) based on the given string and alphabet.
 #[must_use]
 pub fn generate_random_edit<R: Rng>(string: &str, alphabet: &[char], rng: &mut R) -> Edit {
-    let edit_type = u8::next_random(rng) % 3;
+    // if the string is empty, we only edit by insertion
+    let edit_type = if string.is_empty() { 0 } else { u8::next_random(rng) % 3 };
+
     let length = string.len();
     let char = alphabet[usize::next_random(rng) % alphabet.len()];
 
@@ -167,8 +169,6 @@ pub fn generate_clumped_data<U: UInt>(
     seed: u64,
     inter_clump_distance: U,
 ) -> Vec<(String, String)> {
-    // TODO(Morgan): add min length and max length for strings as inputs here
-
     let rng = &mut rand::rngs::StdRng::seed_from_u64(seed);
 
     let min_distance = clump_radius * U::from(2);

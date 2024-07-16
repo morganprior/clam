@@ -57,7 +57,7 @@ fn random_edits() {
 
 #[test]
 fn random_batch() {
-    let seed_string = "ACGGTTTGCGTAACGGTTTGCGTAACGGTTTGCGTAACGGTTTGCGTAACGGTTTGCGTAAC";
+    let seed_string = "ACGGTTTGACGTAGACTGATGGAGATCGATGTCGATGCATAGCATAT";
     let alphabet = vec!['A', 'C', 'G', 'T'];
     let seed = 42;
     let rng = &mut rand::rngs::StdRng::seed_from_u64(seed);
