@@ -114,8 +114,7 @@ fn main() -> Result<(), String> {
     let clump_rng = &mut rand::rngs::StdRng::seed_from_u64(seed);
 
     let alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".chars().collect::<Vec<_>>();
-    // let seed_string = generate_random_string(100, &alphabet, &mut rand::rngs::StdRng::seed_from_u64(seed));
-    let seed_string = generate_random_string(100, &alphabet);
+    let seed_string = generate_random_string(100, &alphabet, seed);
     let penalties = Penalties::<u16>::new(0, 1, 1);
 
     let sizes = [

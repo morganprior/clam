@@ -18,9 +18,10 @@ use distances::{
 ///
 /// A random string of the given length from the given alphabet.
 #[must_use]
-pub fn generate_random_string(length: usize, alphabet: &[char]) -> String {
+pub fn generate_random_string(length: usize, alphabet: &[char], seed: u64) -> String {
+    let rng = &mut rand::rngs::StdRng::seed_from_u64(seed);
     (0..length)
-        .map(|_| alphabet[rand::random::<usize>() % alphabet.len()])
+        .map(|_| alphabet[usize::next_random(rng) % alphabet.len()])
         .collect()
 }
 
