@@ -89,21 +89,21 @@ fn serialize_edits(edits: &[Edit]) -> Box<[u8]> {
 fn deserialize_edits(bytes: &[u8]) -> Result<Vec<Edit>, String> {
     let mut edits = Vec::new();
     let mut i = 0;
-    let mask_edit = 0b11;
+    let mask_edit = 0b11_000000;
     while i < bytes.len() {
         let index = u16::from_be_bytes([bytes[i] & !mask_edit, bytes[i + 1]]);
         let edit_bits = bytes[i] & mask_edit;
         let edit = match edit_bits {
-            0b10 => {
+            0b10_000000 => {
                 i += 2;
                 Edit::Del(index as usize)
             }
-            0b01 => {
+            0b01_000000 => {
                 let c = bytes[i + 2];
                 i += 3;
                 Edit::Ins(index as usize, c as char)
             }
-            0b11 => {
+            0b11_000000 => {
                 let c = bytes[i + 2];
                 i += 3;
                 Edit::Sub(index as usize, c as char)
@@ -131,9 +131,9 @@ fn deserialize_edits(bytes: &[u8]) -> Result<Vec<Edit>, String> {
 #[allow(clippy::cast_possible_truncation)]
 fn edit_to_bin(edit: &Edit) -> Vec<u8> {
     let mask_6 = 0b0011_1111;
-    let mask_del = 0b10;
-    let mask_ins = 0b01;
-    let mask_sub = 0b11;
+    let mask_del = 0b10_000000;
+    let mask_ins = 0b01_000000;
+    let mask_sub = 0b11_000000;
     match edit {
         // First 2 bits for the type of edit, 14 bits for the index.
         Edit::Del(i) => {

@@ -15,6 +15,7 @@ debug = true
 overflow-checks = true
 
 [profile.release]
+debug = true
 strip = true
 lto = true
 codegen-units = 1

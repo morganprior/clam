@@ -1,19 +1,27 @@
-use distances::strings::levenshtein_custom;
-use distances::strings::needleman_wunsch::{compute_table, trace_back_recursive};
-use distances::strings::{unaligned_x_to_y, Penalties};
 use std::collections::HashMap;
+
+use rand::prelude::*;
+
+use distances::strings::{
+    levenshtein_custom,
+    needleman_wunsch::{compute_table, trace_back_recursive},
+    unaligned_x_to_y, Penalties,
+};
 use symagen::random_edits::{apply_random_edit, are_we_there_yet, create_batch};
 
 #[test]
 fn random_reference() {
     let alphabet = vec!['A', 'C', 'G', 'T'];
     let x = "ACCCGAGTCGTTT";
+    let seed = 42;
+    let rng = &mut rand::rngs::StdRng::seed_from_u64(seed);
 
     for _ in 0..50 {
         let mut y = x.to_string();
 
         for _ in 0..5 {
-            y = apply_random_edit(&y, &alphabet);
+            y = apply_random_edit(&y, &alphabet, rng);
+            // y = apply_random_edit(&y, &alphabet);
         }
 
         let table = compute_table::<u16>(x, &y, Penalties::default());
@@ -29,10 +37,14 @@ fn random_reference() {
 fn random_edits() {
     let alphabet = vec!['N', 'A', 'J', 'I', 'B', 'P', 'E', 'R', 'S', 'T'];
     let x = "NAJIBEATSPEPPERS";
+    let seed = 42;
 
+    let rng = &mut rand::rngs::StdRng::seed_from_u64(seed);
     let penalties = Penalties::new(0, 1, 1);
 
-    let new_string = are_we_there_yet::<u16>(x, penalties, 10, &alphabet);
+    // let new_string = are_we_there_yet::<u16>(x, penalties, 10, &alphabet, seed);
+    let new_string = are_we_there_yet::<u16, StdRng>(x, penalties, 10, &alphabet, rng);
+
     let lev = levenshtein_custom(penalties);
 
     // Should fail, for sanity:
@@ -45,13 +57,16 @@ fn random_edits() {
 
 #[test]
 fn random_batch() {
-    let seed_string = "ACGGTTTGCGTAACGGTTTGCGTAACGGTTTGCGTA";
+    let seed_string = "ACGGTTTGCGTAACGGTTTGCGTAACGGTTTGCGTAACGGTTTGCGTAACGGTTTGCGTAAC";
     let alphabet = vec!['A', 'C', 'G', 'T'];
+    let seed = 42;
+    let rng = &mut rand::rngs::StdRng::seed_from_u64(seed);
 
     let penalties = Penalties::new(0, 1, 1);
 
     let batch_size = 100;
-    let batch = create_batch::<u16>(seed_string, penalties, 10, 15, &alphabet, batch_size);
+    let batch = create_batch::<u16, StdRng>(seed_string, penalties, 10, 15, &alphabet, batch_size, rng);
+    assert!(!batch.is_empty(), "Batch is empty");
     let mut strings: HashMap<String, usize> = HashMap::new();
     for n in batch.iter() {
         strings

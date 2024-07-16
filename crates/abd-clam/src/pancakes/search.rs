@@ -122,9 +122,15 @@ mod tests {
             let result = codec_dataset.knn_search(&query, k, &algo);
 
             println!("{}: {result:?}", algo.name());
-            assert_eq!(
-                [dataset[result[0].0].clone(), dataset[result[1].0].clone()],
-                ["NAJIBEATS-PEPPERS", "NAJIB-EATSPEPPERS"],
+            assert_eq!(result.len(), 2);
+            let results = [dataset[result[0].0].clone(), dataset[result[1].0].clone()];
+            assert!(
+                results.contains(&"NAJIBEATS-PEPPERS".to_string()),
+                "Failed on Algorithm: {:?}",
+                algo.name()
+            );
+            assert!(
+                results.contains(&"NAJIB-EATSPEPPERS".to_string()),
                 "Failed on Algorithm: {:?}",
                 algo.name()
             );
