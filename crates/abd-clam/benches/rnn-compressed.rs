@@ -6,7 +6,7 @@ use distances::strings::Penalties;
 
 use symagen::random_edits::{are_we_there_yet, generate_clumped_data, generate_random_string};
 
-use abd_clam::pancakes::{decode_general, encode_general, knn, CodecData, SquishyBall};
+use abd_clam::pancakes::{decode_general, encode_general, rnn, CodecData, SquishyBall};
 use abd_clam::{Cakes, PartitionCriteria, VecDataset};
 
 #[allow(clippy::ptr_arg)]
@@ -14,7 +14,7 @@ fn lev_metric(x: &String, y: &String) -> u16 {
     distances::strings::levenshtein(x, y)
 }
 
-fn compressed_knn(c: &mut Criterion) {
+fn compressed_rnn(c: &mut Criterion) {
     let seed = 42;
     let alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".chars().collect::<Vec<_>>();
     let seed_string = generate_random_string(100, &alphabet, seed);
@@ -87,20 +87,16 @@ fn compressed_knn(c: &mut Criterion) {
         let metadata = dataset.metadata().to_vec();
         let compressed_dataset = CodecData::new(root, dataset, encode_general::<u16>, decode_general, metadata).unwrap();
 
-        let algorithms = [knn::Algorithm::DepthFirstSieve];
-
         for query in query_data {
-            for k in [2, 4, 8] {
-                for variant in &algorithms {
-                    let id = BenchmarkId::new(variant.name(), k);
-                    group.bench_with_input(id, &k, |b, _| {
-                        b.iter_with_large_drop(|| compressed_dataset.knn_search(&query, k, &variant));
-                    });
-                }
+            for radius in [4, 8, 16] {
+                let id = BenchmarkId::new("Clustered", radius);
+                group.bench_with_input(id, &radius, |b, _| {
+                    b.iter_with_large_drop(|| compressed_dataset.rnn_search(&query, radius, &rnn::Algorithm::Clustered));
+                });
 
-                let id = BenchmarkId::new("Linear", k);
-                group.bench_with_input(id, &k, |b, _| {
-                    b.iter_with_large_drop(|| compressed_dataset.knn_search(&query, k, &knn::Algorithm::Linear));
+                let id = BenchmarkId::new("Linear", radius);
+                group.bench_with_input(id, &radius, |b, _| {
+                    b.iter_with_large_drop(|| compressed_dataset.rnn_search(&query, radius, &rnn::Algorithm::Linear));
                 });
             }
         }
@@ -108,5 +104,5 @@ fn compressed_knn(c: &mut Criterion) {
     }
 }
 
-criterion_group!(benches, compressed_knn);
+criterion_group!(benches, compressed_rnn);
 criterion_main!(benches);
